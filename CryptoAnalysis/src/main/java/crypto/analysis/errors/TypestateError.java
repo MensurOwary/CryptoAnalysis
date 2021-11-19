@@ -45,7 +45,7 @@ public class TypestateError extends ErrorWithObjectAllocation{
 		msg.append("Unexpected call to method ");
 		Statement location = getErrorLocation();
 		msg.append(getCalledMethodString(location, useSignatures));
-		msg.append(getObjectType());
+//		msg.append(getObjectType());
 		final Set<String> altMethods = new HashSet<>();
 		for (final SootMethod expectedCall : expectedMethodCalls) {
 			if (useSignatures){

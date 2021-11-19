@@ -18,8 +18,7 @@ import soot.jimple.StringConstant;
 
 public class CogniCryptBoomerangOptions extends DefaultBoomerangOptions {
 	@Override
-	public Optional<AllocVal> getAllocationVal(SootMethod m, Stmt stmt, Val fact,
-			ObservableICFG<Unit, SootMethod> icfg) {
+	public Optional<AllocVal> getAllocationVal(SootMethod m, Stmt stmt, Val fact, ObservableICFG<Unit, SootMethod> icfg) {
 	
 		if (stmt.containsInvokeExpr()) {
 			if (stmt instanceof AssignStmt) {
@@ -46,16 +45,6 @@ public class CogniCryptBoomerangOptions extends DefaultBoomerangOptions {
 		if (!as.getLeftOp().equals(fact.value())) {
 			return Optional.absent();
 		}
-//		if (as.containsInvokeExpr()) {
-//			for (SootMethod callee : icfg.getCalleesOfCallAt(as)) {
-//				for (Unit u : icfg.getEndPointsOf(callee)) {
-//					if (u instanceof ReturnStmt && isAllocationVal(((ReturnStmt) u).getOp())) {
-//						return Optional.of(
-//								new AllocVal(as.getLeftOp(), m, ((ReturnStmt) u).getOp(), new Statement((Stmt) u, m)));
-//					}
-//				}
-//			}
-//		}
 		if (isAllocationVal(as.getRightOp())) {
 			return Optional.of(new AllocVal(as.getLeftOp(), m, as.getRightOp(), new Statement(stmt, m)));
 		}
@@ -96,7 +85,7 @@ public class CogniCryptBoomerangOptions extends DefaultBoomerangOptions {
 
 	@Override
 	public int analysisTimeoutMS() {
-		return 5000;
+		return 50_000_000;
 	}
 	
 	@Override

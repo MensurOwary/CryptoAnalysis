@@ -12,7 +12,7 @@ import crypto.analysis.errors.ForbiddenMethodError;
 import crypto.rules.CrySLForbiddenMethod;
 import crypto.rules.CrySLRule;
 import crypto.typestate.CrySLMethodToSootMethod;
-import crypto.typestate.ExtendedIDEALAnaylsis;
+import crypto.typestate.ExtendedIDEALAnalysis;
 import crypto.typestate.SootBasedStateMachineGraph;
 import ideal.IDEALSeedSolver;
 import soot.SootMethod;
@@ -22,7 +22,7 @@ import soot.jimple.Stmt;
 import typestate.TransitionFunction;
 
 public class ClassSpecification {
-	private ExtendedIDEALAnaylsis extendedIdealAnalysis;
+	private ExtendedIDEALAnalysis extendedIdealAnalysis;
 	private CrySLRule crySLRule;
 	private final CryptoScanner cryptoScanner;
 	private final SootBasedStateMachineGraph fsm;
@@ -31,7 +31,7 @@ public class ClassSpecification {
 		this.crySLRule = rule;
 		this.cryptoScanner = cScanner;
 		this.fsm = new SootBasedStateMachineGraph(rule.getUsagePattern());
-		this.extendedIdealAnalysis = new ExtendedIDEALAnaylsis() {
+		this.extendedIdealAnalysis = new ExtendedIDEALAnalysis() {
 			@Override
 			public SootBasedStateMachineGraph getStateMachine() {
 				return fsm;

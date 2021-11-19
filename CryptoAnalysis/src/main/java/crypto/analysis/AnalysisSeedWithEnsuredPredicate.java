@@ -14,7 +14,7 @@ import boomerang.results.ForwardBoomerangResults;
 import crypto.rules.StateMachineGraph;
 import crypto.rules.StateNode;
 import crypto.rules.TransitionEdge;
-import crypto.typestate.ExtendedIDEALAnaylsis;
+import crypto.typestate.ExtendedIDEALAnalysis;
 import crypto.typestate.SootBasedStateMachineGraph;
 import ideal.IDEALSeedSolver;
 import soot.SootMethod;
@@ -26,7 +26,7 @@ public class AnalysisSeedWithEnsuredPredicate extends IAnalysisSeed{
 
 	private ForwardBoomerangResults<TransitionFunction> analysisResults;
 	private Set<EnsuredCrySLPredicate> ensuredPredicates = Sets.newHashSet();
-	private ExtendedIDEALAnaylsis problem;
+	private ExtendedIDEALAnalysis problem;
 	private boolean analyzed;
 
 	public AnalysisSeedWithEnsuredPredicate(CryptoScanner cryptoScanner, Node<Statement,Val> delegate) {
@@ -36,7 +36,7 @@ public class AnalysisSeedWithEnsuredPredicate extends IAnalysisSeed{
 	@Override
 	public void execute() {
 		cryptoScanner.getAnalysisListener().seedStarted(this);
-		ExtendedIDEALAnaylsis solver = getOrCreateAnalysis();
+		ExtendedIDEALAnalysis solver = getOrCreateAnalysis();
 		solver.run(this);
 		analysisResults = solver.getResults();
 		for(EnsuredCrySLPredicate pred : ensuredPredicates)
@@ -55,8 +55,8 @@ public class AnalysisSeedWithEnsuredPredicate extends IAnalysisSeed{
 	}
 
 
-	private ExtendedIDEALAnaylsis getOrCreateAnalysis() {
-		problem = new ExtendedIDEALAnaylsis() {
+	private ExtendedIDEALAnalysis getOrCreateAnalysis() {
+		problem = new ExtendedIDEALAnalysis() {
 			
 			@Override
 			protected ObservableICFG<Unit, SootMethod> icfg() {

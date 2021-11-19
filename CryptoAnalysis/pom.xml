@@ -14,7 +14,7 @@
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<spdsVersion>2.5.1</spdsVersion>
+		<spdsVersion>2.5.1-SNAPSHOT</spdsVersion>
 		<sootVersion>4.2.1</sootVersion>
 	</properties>
 	<build>
@@ -300,7 +300,7 @@
 		<dependency>
 			<groupId>de.darmstadt.tu.crossing.CrySL</groupId>
 			<artifactId>de.darmstadt.tu.crossing.CrySL</artifactId>
-			<version>2.0.1</version>
+			<version>2.0.2-SNAPSHOT</version>
 		</dependency>
 		<dependency>
 			<groupId>org.eclipse.xtext</groupId>

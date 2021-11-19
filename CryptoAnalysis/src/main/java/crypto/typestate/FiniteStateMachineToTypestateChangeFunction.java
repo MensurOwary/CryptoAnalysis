@@ -1,16 +1,13 @@
 package crypto.typestate;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import boomerang.WeightedForwardQuery;
 import boomerang.jimple.AllocVal;
 import boomerang.jimple.Statement;
-import soot.RefType;
 import soot.SootMethod;
 import soot.Unit;
 import soot.jimple.AssignStmt;
@@ -22,64 +19,52 @@ import typestate.finiteautomata.MatcherTransition;
 import typestate.finiteautomata.State;
 import typestate.finiteautomata.TypeStateMachineWeightFunctions;
 
+import static java.util.Collections.emptySet;
+
 public class FiniteStateMachineToTypestateChangeFunction extends TypeStateMachineWeightFunctions {
 
-	private static final Logger LOGGER = LoggerFactory.getLogger(FiniteStateMachineToTypestateChangeFunction.class);
-	
-	private RefType analyzedType = null;
+    private final SootBasedStateMachineGraph fsm;
 
-	private SootBasedStateMachineGraph fsm;
+    public FiniteStateMachineToTypestateChangeFunction(SootBasedStateMachineGraph fsm) {
+        for (MatcherTransition trans : fsm.getAllTransitions()) {
+            this.addTransition(trans);
+        }
+        this.fsm = fsm;
+    }
 
-	public FiniteStateMachineToTypestateChangeFunction(SootBasedStateMachineGraph fsm) {
-		for(MatcherTransition trans : fsm.getAllTransitions()){
-			this.addTransition(trans);
-		}
-		for(SootMethod m : fsm.initialTransitonLabel()){
-			if(m.isConstructor()){
-				if (analyzedType == null){
-					analyzedType = m.getDeclaringClass().getType();
-				} else {
-					// This code was added to detect unidentified outlying cases affected by the changes made for issue #47.
-					if (analyzedType != m.getDeclaringClass().getType()){
-						LOGGER.error("The type of m.getDeclaringClass() does not appear to be consistent across fsm.initialTransitonLabel().");
-                    }
-				}
-			}
-		}
-		this.fsm = fsm;
-	}
+    @Override
+    public Collection<WeightedForwardQuery<TransitionFunction>> generateSeed(SootMethod method, Unit unit) {
+        if (!(unit instanceof Stmt) || !((Stmt) unit).containsInvokeExpr()) return emptySet();
+        InvokeExpr invokeExpr = ((Stmt) unit).getInvokeExpr();
+        SootMethod calledMethod = invokeExpr.getMethod();
+		if (!fsm.initialTransitonLabel().contains(calledMethod)) return emptySet();
+//        if (!fsm.getInvolvedMethods().contains(calledMethod)) return emptySet();
 
+        Set<WeightedForwardQuery<TransitionFunction>> forwardQueries = new HashSet<>();
+        if (calledMethod.isStatic()) {
+            if (unit instanceof AssignStmt) {
+                AssignStmt stmt = (AssignStmt) unit;
+				final AllocVal allocVal = new AllocVal(stmt.getLeftOp(), method, stmt.getRightOp(), new Statement(stmt, method));
+                forwardQueries.add(createQuery(stmt, method, allocVal));
+            }
+        } else if (invokeExpr instanceof InstanceInvokeExpr) {
+            InstanceInvokeExpr iie = (InstanceInvokeExpr) invokeExpr;
+			final AllocVal allocVal = new AllocVal(iie.getBase(), method, iie, new Statement((Stmt) unit, method));
+            forwardQueries.add(createQuery(unit, method, allocVal));
+        }
+        return forwardQueries;
+    }
 
-	@Override
-	public Collection<WeightedForwardQuery<TransitionFunction>> generateSeed(SootMethod method, Unit unit) {
-		Set<WeightedForwardQuery<TransitionFunction>> out = new HashSet<>();
-		if (!(unit instanceof Stmt) || !((Stmt) unit).containsInvokeExpr())
-			return out;
-		InvokeExpr invokeExpr = ((Stmt) unit).getInvokeExpr();
-		SootMethod calledMethod = invokeExpr.getMethod();
-		if (!fsm.initialTransitonLabel().contains(calledMethod))
-			return out;
-		if (calledMethod.isStatic()) {
-			if(unit instanceof AssignStmt){
-				AssignStmt stmt = (AssignStmt) unit;
-				out.add(createQuery(stmt,method,new AllocVal(stmt.getLeftOp(), method, stmt.getRightOp(), new Statement(stmt,method))));
-			}
-		} else if (invokeExpr instanceof InstanceInvokeExpr){
-			InstanceInvokeExpr iie = (InstanceInvokeExpr) invokeExpr;
-			out.add(createQuery(unit,method,new AllocVal(iie.getBase(), method,iie, new Statement((Stmt) unit,method))));
-		}
-		return out;
-	}
-
-	private WeightedForwardQuery<TransitionFunction> createQuery(Unit unit, SootMethod method, AllocVal allocVal) {
-		return new WeightedForwardQuery<TransitionFunction>(new Statement((Stmt)unit,method), allocVal, fsm.getInitialWeight(new Statement((Stmt)unit,method)));
-	}
+    private WeightedForwardQuery<TransitionFunction> createQuery(Unit unit, SootMethod method, AllocVal allocVal) {
+        final Statement stmt = new Statement((Stmt) unit, method);
+        return new WeightedForwardQuery<>(stmt, allocVal, fsm.getInitialWeight(stmt));
+    }
 
 
-	@Override
-	protected State initialState() {
-		throw new UnsupportedOperationException("This method should never be called.");
-	}
-	
-	
+    @Override
+    protected State initialState() {
+        throw new UnsupportedOperationException("This method should never be called.");
+    }
+
+
 }

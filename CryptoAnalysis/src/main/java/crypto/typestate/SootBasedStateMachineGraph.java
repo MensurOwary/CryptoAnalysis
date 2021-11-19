@@ -19,7 +19,6 @@ import crypto.rules.TransitionEdge;
 import soot.SootMethod;
 import typestate.TransitionFunction;
 import typestate.finiteautomata.MatcherTransition;
-import typestate.finiteautomata.MatcherTransition.Parameter;
 import typestate.finiteautomata.MatcherTransition.Type;
 import typestate.finiteautomata.State;
 
@@ -34,18 +33,20 @@ public class SootBasedStateMachineGraph {
 	private List<CrySLMethod> crySLinitialTransitionLabel;
 	private LabeledMatcherTransition initialTransiton;
 
+	// INFO: class of interest
 	public SootBasedStateMachineGraph(StateMachineGraph fsm) {
 		this.stateMachineGraph = fsm;
-		//TODO #15 we must start the analysis in state stateMachineGraph.getInitialTransition().from();
 		for (final TransitionEdge t : stateMachineGraph.getAllTransitions()) {
 			WrappedState from = wrappedState(t.from());
 			WrappedState to = wrappedState(t.to());
-			LabeledMatcherTransition trans = new LabeledMatcherTransition(from, t.getLabel(),
-					Parameter.This, to, Type.OnCallOrOnCallToReturn);
+			// INFO: 'Parameter.This' seems useless
+			LabeledMatcherTransition trans = new LabeledMatcherTransition(from, t.getLabel(), null, to, Type.OnCallOrOnCallToReturn);
+//			LabeledMatcherTransition trans = new LabeledMatcherTransition(from, t.getLabel(), Parameter.This, to, Type.OnCallOrOnCallToReturn);
 			this.addTransition(trans);
 			outTransitions.putAll(from, convert(t.getLabel()));
-			if(stateMachineGraph.getInitialTransition().equals(t))
+			if(stateMachineGraph.getInitialTransition().equals(t)) {
 				this.initialTransiton = trans;
+			}
 		}
 		crySLinitialTransitionLabel = stateMachineGraph.getInitialTransition().getLabel();
 		
@@ -58,10 +59,12 @@ public class SootBasedStateMachineGraph {
 			if(expected != null){
 				remaining.removeAll(expected);
 				ReportingErrorStateNode repErrorState = new ReportingErrorStateNode(expected);
-				this.addTransition(new MatcherTransition(wrapped, remaining, Parameter.This, new ReportingErrorStateNode(expected), Type.OnCallOrOnCallToReturn));
+				this.addTransition(new MatcherTransition(wrapped, remaining, null, new ReportingErrorStateNode(expected), Type.OnCallOrOnCallToReturn));
+//				this.addTransition(new MatcherTransition(wrapped, remaining, Parameter.This, new ReportingErrorStateNode(expected), Type.OnCallOrOnCallToReturn));
 				//Once an object is in error state, it always remains in the error state.
 				ErrorStateNode errorState = new ErrorStateNode();
-				this.addTransition(new MatcherTransition(repErrorState, getInvolvedMethods(), Parameter.This, errorState, Type.OnCallOrOnCallToReturn));
+				this.addTransition(new MatcherTransition(repErrorState, getInvolvedMethods(), null, errorState, Type.OnCallOrOnCallToReturn));
+//				this.addTransition(new MatcherTransition(repErrorState, getInvolvedMethods(), Parameter.This, errorState, Type.OnCallOrOnCallToReturn));
 			}
 		}
 		

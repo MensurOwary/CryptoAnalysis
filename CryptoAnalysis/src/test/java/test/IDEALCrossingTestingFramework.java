@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import crypto.typestate.ExtendedIDEALAnalysis;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,7 +19,6 @@ import boomerang.debugger.IDEVizDebugger;
 import boomerang.jimple.Val;
 import boomerang.preanalysis.BoomerangPretransformer;
 import boomerang.results.ForwardBoomerangResults;
-import crypto.HeadlessCryptoScanner;
 import crypto.analysis.CrySLResultsReporter;
 import crypto.analysis.CrySLRulesetSelector;
 import crypto.analysis.CrySLRulesetSelector.RuleFormat;
@@ -26,7 +26,6 @@ import crypto.analysis.CrySLRulesetSelector.Ruleset;
 import crypto.exceptions.CryptoAnalysisException;
 import crypto.rules.CrySLRule;
 import crypto.typestate.CrySLMethodToSootMethod;
-import crypto.typestate.ExtendedIDEALAnaylsis;
 import crypto.typestate.SootBasedStateMachineGraph;
 import ideal.IDEALSeedSolver;
 import soot.Body;
@@ -54,8 +53,8 @@ public abstract class IDEALCrossingTestingFramework extends AbstractTestingFrame
 	public static final String RULES_BASE_DIR = "src/main/resources/";
 	private static final RuleFormat ruleFormat = RuleFormat.SOURCE;
 	
-	protected ExtendedIDEALAnaylsis createAnalysis() {
-		return new ExtendedIDEALAnaylsis() {
+	protected ExtendedIDEALAnalysis createAnalysis() {
+		return new ExtendedIDEALAnalysis() {
 			
 			@Override
 			protected ObservableICFG<Unit, SootMethod> icfg() {
@@ -144,7 +143,7 @@ public abstract class IDEALCrossingTestingFramework extends AbstractTestingFrame
 
 	protected Map<WeightedForwardQuery<TransitionFunction>, ForwardBoomerangResults<TransitionFunction>> executeAnalysis() {
 		CrySLMethodToSootMethod.reset();
-		ExtendedIDEALAnaylsis analysis = IDEALCrossingTestingFramework.this.createAnalysis();
+		ExtendedIDEALAnalysis analysis = IDEALCrossingTestingFramework.this.createAnalysis();
 		return analysis.run();
 	}
 

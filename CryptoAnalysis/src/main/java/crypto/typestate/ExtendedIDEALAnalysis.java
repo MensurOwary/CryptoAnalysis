@@ -1,9 +1,6 @@
 package crypto.typestate;
 
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import com.google.common.collect.Maps;
 
@@ -23,23 +20,19 @@ import ideal.IDEALAnalysis;
 import ideal.IDEALAnalysisDefinition;
 import ideal.IDEALSeedSolver;
 import ideal.IDEALSeedTimeout;
-import soot.MethodOrMethodContext;
-import soot.Scene;
-import soot.SootMethod;
-import soot.Unit;
+import soot.*;
 import soot.jimple.toolkits.callgraph.ReachableMethods;
 import soot.util.queue.QueueReader;
 import sync.pds.solver.WeightFunctions;
 import typestate.TransitionFunction;
 
-public abstract class ExtendedIDEALAnaylsis {
+public abstract class ExtendedIDEALAnalysis {
 
 	private FiniteStateMachineToTypestateChangeFunction changeFunction;
 	private final IDEALAnalysis<TransitionFunction> analysis;
 	private ForwardBoomerangResults<TransitionFunction> results;
-	private HashSet seeds;
-	
-	public ExtendedIDEALAnaylsis(){
+
+	public ExtendedIDEALAnalysis(){
 		analysis = new IDEALAnalysis<TransitionFunction>(new IDEALAnalysisDefinition<TransitionFunction>() {
 			@Override
 			public Collection<WeightedForwardQuery<TransitionFunction>> generate(SootMethod method, Unit stmt) {
@@ -53,7 +46,7 @@ public abstract class ExtendedIDEALAnaylsis {
 
 			@Override
 			public ObservableICFG<Unit, SootMethod> icfg() {
-				return ExtendedIDEALAnaylsis.this.icfg();
+				return ExtendedIDEALAnalysis.this.icfg();
 			}
 
 			@Override
@@ -63,7 +56,7 @@ public abstract class ExtendedIDEALAnaylsis {
 
 			@Override
 			public Debugger<TransitionFunction> debugger(IDEALSeedSolver<TransitionFunction> solver) {
-				return ExtendedIDEALAnaylsis.this.debugger(solver);
+				return ExtendedIDEALAnalysis.this.debugger(solver);
 			}
 			@Override
 			public BoomerangOptions boomerangOptions() {
@@ -106,7 +99,8 @@ public abstract class ExtendedIDEALAnaylsis {
         if (!method.hasActiveBody())
             return seeds;
         for (Unit u : method.getActiveBody().getUnits()) {
-            seeds.addAll( getOrCreateTypestateChangeFunction().generateSeed(method, u));
+			final Collection<WeightedForwardQuery<TransitionFunction>> seed = getOrCreateTypestateChangeFunction().generateSeed(method, u);
+			seeds.addAll(seed);
         }
         return seeds;
     }

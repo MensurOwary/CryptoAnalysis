@@ -1,13 +1,7 @@
 package crypto.analysis;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Set;
 import java.util.stream.Collectors;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
@@ -38,11 +32,7 @@ import crypto.rules.CrySLObject;
 import crypto.rules.CrySLPredicate;
 import crypto.rules.StateNode;
 import crypto.rules.TransitionEdge;
-import crypto.typestate.CrySLMethodToSootMethod;
-import crypto.typestate.ExtendedIDEALAnaylsis;
-import crypto.typestate.ReportingErrorStateNode;
-import crypto.typestate.SootBasedStateMachineGraph;
-import crypto.typestate.WrappedState;
+import crypto.typestate.*;
 import ideal.IDEALSeedSolver;
 import soot.IntType;
 import soot.Local;
@@ -51,7 +41,6 @@ import soot.SootMethod;
 import soot.Type;
 import soot.Unit;
 import soot.Value;
-import soot.ValueBox;
 import soot.jimple.AssignStmt;
 import soot.jimple.Constant;
 import soot.jimple.IntConstant;
@@ -64,26 +53,37 @@ import typestate.TransitionFunction;
 import typestate.finiteautomata.ITransition;
 import typestate.finiteautomata.State;
 
+import static java.util.stream.Collectors.groupingBy;
+
 public class AnalysisSeedWithSpecification extends IAnalysisSeed {
 
 	private final ClassSpecification spec;
-	private ExtendedIDEALAnaylsis analysis;
+	private final ExtendedIDEALAnalysis analysis;
 	private ForwardBoomerangResults<TransitionFunction> results;
-	private Collection<EnsuredCrySLPredicate> ensuredPredicates = Sets.newHashSet();
-	private Multimap<Statement, State> typeStateChange = HashMultimap.create();
-	private Collection<EnsuredCrySLPredicate> indirectlyEnsuredPredicates = Sets.newHashSet();
-	private Set<ISLConstraint> missingPredicates = Sets.newHashSet();
+	private final Collection<EnsuredCrySLPredicate> ensuredPredicates = Sets.newHashSet();
+	private final Multimap<Statement, State> typeStateChange = HashMultimap.create();
+	private final Collection<EnsuredCrySLPredicate> indirectlyEnsuredPredicates = Sets.newHashSet();
+	private final Set<ISLConstraint> missingPredicates = Sets.newHashSet();
 	private ConstraintSolver constraintSolver;
 	private boolean internalConstraintSatisfied;
 	protected Map<Statement, SootMethod> allCallsOnObject = Maps.newLinkedHashMap();
 	private ExtractParameterAnalysis parameterAnalysis;
-	private Set<ResultsHandler> resultHandlers = Sets.newHashSet();
+	private final Set<ResultsHandler> resultHandlers = Sets.newHashSet();
 	private boolean secure = true;
 
 	public AnalysisSeedWithSpecification(CryptoScanner cryptoScanner, Statement stmt, Val val, ClassSpecification spec) {
-		super(cryptoScanner, stmt, val, spec.getFSM().getInitialWeight(stmt));
+		this(cryptoScanner, stmt, val, spec, spec.getFSM().getInitialWeight(stmt));
+	}
+
+	public AnalysisSeedWithSpecification(CryptoScanner cryptoScanner, Statement stmt, Val val, ClassSpecification spec, Collection<Val> relevantVariables) {
+		this(cryptoScanner, stmt, val, spec, spec.getFSM().getInitialWeight(stmt));
+		relevantVariables.forEach(this::addRelatedVariable);
+	}
+
+	private AnalysisSeedWithSpecification(CryptoScanner cryptoScanner, Statement stmt, Val val, ClassSpecification spec, TransitionFunction weight) {
+		super(cryptoScanner, stmt, val, weight);
 		this.spec = spec;
-		this.analysis = new ExtendedIDEALAnaylsis() {
+		this.analysis = new ExtendedIDEALAnalysis() {
 
 			@Override
 			public SootBasedStateMachineGraph getStateMachine() {
@@ -113,6 +113,7 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
 	}
 
 	public void execute() {
+		// this line below literally does nothing
 		cryptoScanner.getAnalysisListener().seedStarted(this);
 		runTypestateAnalysis();
 		if (results == null)
@@ -133,7 +134,7 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
 		}
 
 		computeTypestateErrorUnits();
-		computeTypestateErrorsForEndOfObjectLifeTime();
+		computeTypestateErrorsForEndOfObjectLifeTime(); //TODO: ignored for now
 
 		cryptoScanner.getAnalysisListener().onSeedFinished(this, results);
 		cryptoScanner.getAnalysisListener().collectedValues(this, parameterAnalysis.getCollectedValues());
@@ -189,7 +190,6 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
 
 	private void computeTypestateErrorsForEndOfObjectLifeTime() {
 		Table<Statement, Val, TransitionFunction> endPathOfPropagation = results.getObjectDestructingStatements();
-
 		for (Cell<Statement, Val, TransitionFunction> c : endPathOfPropagation.cellSet()) {
 			Set<SootMethod> expectedMethodsToBeCalled = Sets.newHashSet();
 			for (ITransition n : c.getValue().values()) {
@@ -207,6 +207,13 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
 					}
 				}
 			}
+			expectedMethodsToBeCalled = expectedMethodsToBeCalled.stream()
+					.collect(groupingBy(SootMethod::getName))
+					.values()
+					.stream()
+					.map(e -> e.get(0))
+					.collect(Collectors.toSet());
+
 			if (!expectedMethodsToBeCalled.isEmpty()) {
 				Statement s = c.getRowKey();
 				Val val = c.getColumnKey();
@@ -217,11 +224,15 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
 		}
 	}
 
+	// INFO: curr is where we are at right now
+	// INFO: stateNode is where we need to be
+	// INFO: if stateNode is an error state, we report error
 	private void typeStateChangeAtStatement(Statement curr, State stateNode) {
 		if (typeStateChange.put(curr, stateNode)) {
 			if (stateNode instanceof ReportingErrorStateNode) {
 				ReportingErrorStateNode errorStateNode = (ReportingErrorStateNode) stateNode;
-				cryptoScanner.getAnalysisListener().reportError(this, new TypestateError(curr, getSpec().getRule(), this, errorStateNode.getExpectedCalls()));
+					final TypestateError typestateError = new TypestateError(curr, getSpec().getRule(), this, errorStateNode.getExpectedCalls());
+					cryptoScanner.getAnalysisListener().reportError(this, typestateError);
 			}
 		}
 		onAddedTypestateChange(curr, stateNode);
@@ -532,21 +543,8 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
 				final Value rightSide = ((AssignStmt) u).getRightOp();
 				if (rightSide instanceof Constant) {
 					values.add(retrieveConstantFromValue(rightSide));
-				} else {
-					final List<ValueBox> useBoxes = rightSide.getUseBoxes();
-
-					// varVal.put(callSite.getVarName(),
-					// retrieveConstantFromValue(useBoxes.get(callSite.getIndex()).getValue()));
 				}
 			}
-			// if (u instanceof AssignStmt) {
-			// final List<ValueBox> useBoxes = ((AssignStmt) u).getRightOp().getUseBoxes();
-			// if (!(useBoxes.size() <= cswpi.getIndex())) {
-			// values.add(retrieveConstantFromValue(useBoxes.get(cswpi.getIndex()).getValue()));
-			// }
-			// } else if (cswpi.getStmt().equals(u)) {
-			// values.add(retrieveConstantFromValue(cswpi.getStmt().getUseBoxes().get(cswpi.getIndex()).getValue()));
-			// }
 		}
 		return values;
 	}
@@ -610,7 +608,7 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
 	public int hashCode() {
 		final int prime = 31;
 		int result = super.hashCode();
-		result = prime * result + ((spec == null) ? 0 : spec.hashCode());
+		result = prime * result + ((spec == null) ? 0 : spec.hashCode()) ; // + ((weight() == null) ? 0 : weight().hashCode());
 		return result;
 	}
 
@@ -628,6 +626,11 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
 				return false;
 		} else if (!spec.equals(other.spec))
 			return false;
+//		if (weight() == null) {
+//			if (other.weight() != null)
+//				return false;
+//		} else if (!weight().equals(other.weight()))
+//			return false;
 		return true;
 	}
 
@@ -642,10 +645,6 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
 	@Override
 	public Set<Node<Statement, Val>> getDataFlowPath() {
 		return results.getDataFlowPath();
-	}
-
-	public Map<Statement, SootMethod> getAllCallsOnObject() {
-		return allCallsOnObject;
 	}
 
 }

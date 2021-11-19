@@ -34,7 +34,7 @@ public class CrySLComparisonConstraint extends CrySLLiteral implements java.io.S
 			case l:
 				return "<";
 			case le:
-				return "<";
+				return "<=";
 			case g:
 				return ">";
 			case ge:

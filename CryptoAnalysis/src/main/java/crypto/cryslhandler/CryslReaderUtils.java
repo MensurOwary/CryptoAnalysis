@@ -53,12 +53,12 @@ public class CryslReaderUtils {
 		}
 		final Method method = ((SuperType) lab).getMeth();
 		
-		String methodName = method.getMethName().getSimpleName();
-		if (methodName == null) {
-			methodName = ((de.darmstadt.tu.crossing.crySL.Domainmodel) (method.eContainer().eContainer().eContainer())).getJavaType().getSimpleName();
-		}
-		final String qualifiedName =
-				((de.darmstadt.tu.crossing.crySL.Domainmodel) (method.eContainer().eContainer().eContainer())).getJavaType().getQualifiedName() + "." + methodName; // method.getMethName().getQualifiedName();
+//		String methodName = method.getMethName().getSimpleName();
+//		if (methodName == null) {
+//			// TODO: this part is hazardous
+//			methodName = ((de.darmstadt.tu.crossing.crySL.Domainmodel) (method.eContainer().eContainer().eContainer())).getJavaType().getSimpleName();
+//		}
+		final String qualifiedName = method.getMethName().getQualifiedName();
 		// qualifiedName = removeSPI(qualifiedName);
 		final List<Entry<String, String>> pars = new ArrayList<>();
 		final de.darmstadt.tu.crossing.crySL.Object returnValue = method.getLeftSide();

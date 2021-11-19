@@ -14,6 +14,7 @@ import crypto.analysis.errors.ErrorWithObjectAllocation;
 import crypto.rules.CrySLRule;
 import soot.SootClass;
 import soot.SootMethod;
+import soot.jimple.Stmt;
 
 public class ReporterHelper{
 
@@ -64,7 +65,9 @@ public class ReporterHelper{
 						report += "\n";
 					}
 					report += String.format("\t\t\t%s\n", marker.toErrorMarkerString());
-					report += String.format("\t\t\tat statement: %s\n\n", marker.getErrorLocation().getUnit().get());
+					final Stmt stmt = marker.getErrorLocation().getUnit().get();
+					final String lineNumberTag = stmt.getTag("LineNumberTag").toString();
+					report += String.format("\t\t\tat statement: [%s] %s\n\n", lineNumberTag, stmt);
 				}
 			}
 			report += "\n";

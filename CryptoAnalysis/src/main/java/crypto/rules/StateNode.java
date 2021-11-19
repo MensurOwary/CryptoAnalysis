@@ -49,7 +49,7 @@ public class StateNode implements java.io.Serializable {
 		nodeSB.append(name);
 		nodeSB.append(" (");
 		if (!accepting) {
-			nodeSB.append(hopsToAccepting + "hops to ");
+			nodeSB.append(hopsToAccepting + " hops to ");
 		} 
 		nodeSB.append("accepting)");
 		return nodeSB.toString();

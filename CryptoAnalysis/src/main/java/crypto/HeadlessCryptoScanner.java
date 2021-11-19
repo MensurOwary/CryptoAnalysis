@@ -69,9 +69,9 @@ public abstract class HeadlessCryptoScanner {
 		} catch (CryptoAnalysisParserException e) {
 			LOGGER.error("Parser failed with error: " + e.getClass().toString(), e);
 		}
-		
-		HeadlessCryptoScanner scanner = new HeadlessCryptoScanner() {
-			
+
+		return new HeadlessCryptoScanner() {
+
 			@Override
 			protected String applicationClassPath() {
 				return settings.getApplicationPath();
@@ -102,9 +102,7 @@ public abstract class HeadlessCryptoScanner {
 				}
 				return rules;
 			}
-			
 		};
-		return scanner;
 	}
 
 	public void exec() {
