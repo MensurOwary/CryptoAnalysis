@@ -55,7 +55,7 @@ public class StateMachineGraphBuilder {
 			initialNode = n;
 		}
 		if (this.head != null) {
-			processHead(this.head, 0, HashMultimap.create(), initialNode);
+			processHead(this.head, HashMultimap.create(), initialNode);
 		} else {
 			this.result.addEdge(new TransitionEdge(new ArrayList<CrySLMethod>(), initialNode, initialNode));
 		}
@@ -277,7 +277,7 @@ public class StateMachineGraphBuilder {
 		return false;
 	}
 
-	private void processHead(final Expression curLevel, final int level, final Multimap<Integer, Map.Entry<String, StateNode>> leftOvers, StateNode prevNode) {
+	private void processHead(final Expression curLevel, final Multimap<Integer, Entry<String, StateNode>> leftOvers, StateNode prevNode) {
 		final Expression left = curLevel.getLeft();
 		final Expression right = curLevel.getRight();
 		final String leftElOp = (left != null) ? left.getElementop() : "";
@@ -285,169 +285,199 @@ public class StateMachineGraphBuilder {
 		final String orderOp = curLevel.getOrderop();
 
 		if (left == null && right == null) {
-			final String elOp = curLevel.getElementop();
-			if ("*".equals(elOp) || "?".equals(elOp)) {
-				prevNode = addRegularEdge(curLevel, prevNode, null, true);
+			isLeafNode(curLevel, prevNode);
+		} else {
+			final int level = 0;
+			if ((left instanceof Order || left instanceof SimpleOrder) && (right instanceof Order || right instanceof SimpleOrder)) {
+				bothBranchesAreOrderInstances(level, leftOvers, prevNode, left, right, leftElOp, rightElOp, orderOp);
+			} else if (left instanceof Order || left instanceof SimpleOrder) {
+				leftBranchIsOrderWhileRightIsNot(level, leftOvers, prevNode, left, right, rightElOp, orderOp);
+			} else if (right instanceof Order || right instanceof SimpleOrder) {
+				rightBranchIsOrderWhileLeftIsNot(level, leftOvers, prevNode, left, right, leftElOp, rightElOp, orderOp);
 			} else {
-				addRegularEdge(curLevel, prevNode, null);
+				neitherBranchesAreOrderInstances(level, leftOvers, prevNode, left, right, leftElOp, rightElOp, orderOp);
 			}
-			if ("*".equals(elOp) || "+".equals(elOp)) {
-				addRegularEdge(curLevel, prevNode, prevNode, true);
-			}
-		} else if ((left instanceof Order || left instanceof SimpleOrder) && (right instanceof Order || right instanceof SimpleOrder)) {
-			final StateNode leftPrev = prevNode;
-			prevNode = process(left, level + 1, leftOvers, prevNode);
-			final StateNode rightPrev = prevNode;
-			if ("|".equals(orderOp)) {
-				prevNode = process(right, level + 1, leftOvers, leftPrev);
-			} else {
-				prevNode = process(right, level + 1, leftOvers, prevNode);	
-			}
-			for (Entry<String, StateNode> a : leftOvers.get(level).stream().filter(e -> "?".equals(e.getKey())).collect(Collectors.toList())) {
-				if ("*".equals(rightElOp) || "?".equals(rightElOp)) {
-					setAcceptingState(a.getValue());
-					for (TransitionEdge l : getOutgoingEdges(rightPrev, null)) {
-						addRegularEdge(l.getLabel(), a.getValue(), l.getRight(), true); 
-					}
-				}
-			}
+		}
+	}
 
-			if ("*".equals(rightElOp) || "?".equals(rightElOp)) {
-				setAcceptingState(rightPrev);
-			}
-			if (rightElOp != null && ("+".equals(rightElOp) || "*".equals(rightElOp))) {
-				final String orderop = right.getOrderop();
-				List<TransitionEdge> outgoingEdges = null;
-				if (orderop != null && "|".equals(orderop)) {
-					outgoingEdges = getOutgoingEdges(rightPrev, null);
-				} else {
-					outgoingEdges = getOutgoingEdges(rightPrev, prevNode);
-				}
-				for (final TransitionEdge outgoingEdge : outgoingEdges) {
-					addRegularEdge(outgoingEdge.getLabel(), prevNode, outgoingEdge.to(), true);
-				}
-			}
+	private void neitherBranchesAreOrderInstances(int level, Multimap<Integer, Entry<String, StateNode>> leftOvers, StateNode prevNode, Expression left, Expression right, String leftElOp, String rightElOp, String orderOp) {
+		StateNode leftPrev = null;
+		leftPrev = prevNode;
+		StateNode returnToNode = isOr(level, leftOvers);
 
-			if (leftElOp != null && ("?".equals(leftElOp) || "*".equals(leftElOp))) {
-				addRegularEdge(right, leftPrev, prevNode, true);
-			}
-		} else if ((left instanceof Order || left instanceof SimpleOrder) && !(right instanceof Order || right instanceof SimpleOrder)) {
-			final StateNode leftPrev = prevNode;
-			prevNode = process(left, level + 1, leftOvers, prevNode);
-			final StateNode rightPrev = prevNode;
+		final boolean leftOptional = "?".equals(leftElOp) || "*".equals(leftElOp);
+		prevNode = addRegularEdge(left, prevNode, null, leftOptional);
+
+		if (leftElOp != null && ("+".equals(leftElOp) || "*".equals(leftElOp))) {
+			addRegularEdge(left, prevNode, prevNode, true);
+		}
+
+		final boolean rightoptional = "?".equals(rightElOp) || "*".equals(rightElOp);
+		if (returnToNode != null || "|".equals(orderOp)) {
 			if ("|".equals(orderOp)) {
-				prevNode = addRegularEdge(right, leftPrev, prevNode);
-			} else {
-				prevNode = addRegularEdge(right, prevNode, null);
+				addRegularEdge(right, leftPrev, prevNode, rightoptional);
 			}
-			for (Entry<String, StateNode> a : leftOvers.get(level).stream().filter(e -> "*".equals(e.getKey())).collect(Collectors.toList())) {
-				addRegularEdge(right, a.getValue(), prevNode, true);
+			if ((returnToNode = isOr(level, leftOvers)) != null) {
+				prevNode = addRegularEdge(right, prevNode, returnToNode, rightoptional);
 			}
-			boolean isOptional = "*".equals(rightElOp) || "?".equals(rightElOp);
-			if (isOptional) {
-				setAcceptingState(rightPrev);
-				if ("?".equals(left.getRight().getElementop()) || "*".equals(left.getRight().getElementop())) {
-					final List<TransitionEdge> outgoingEdges = getOutgoingEdges(leftPrev, null);
-					for (final TransitionEdge outgoingEdge : outgoingEdges) {
-						setAcceptingState(outgoingEdge.to());
-					}
-				}
+		} else {
+			prevNode = addRegularEdge(right, prevNode, null, rightoptional);
+		}
+
+		if (rightElOp != null && ("+".equals(rightElOp) || "*".equals(rightElOp))) {
+			addRegularEdge(right, prevNode, prevNode, true);
+		}
+
+		if (leftElOp != null && ("?".equals(leftElOp) || "*".equals(leftElOp))) {
+			addRegularEdge(right, leftPrev, prevNode, true);
+		}
+	}
+
+	private void rightBranchIsOrderWhileLeftIsNot(int level, Multimap<Integer, Entry<String, StateNode>> leftOvers, StateNode prevNode, Expression left, Expression right, String leftElOp, String rightElOp, String orderOp) {
+		StateNode leftPrev = null;
+		leftPrev = prevNode;
+		prevNode = addRegularEdge(left, prevNode, null);
+
+		if (leftElOp != null && ("+".equals(leftElOp) || "*".equals(leftElOp))) {
+			addRegularEdge(left, prevNode, prevNode);
+		}
+
+		final StateNode rightPrev = prevNode;
+		StateNode returnToNode = null;
+		if (rightElOp != null && ("?".equals(rightElOp) || "*".equals(rightElOp))) {
+			setAcceptingState(rightPrev);
+		}
+		if ("|".equals(orderOp)) {
+			setAcceptingState(prevNode);
+			SimpleEntry<String, StateNode> entry = new SimpleEntry<>(orderOp, prevNode);
+			leftOvers.put(level + 1, entry);
+			prevNode = process(right, level + 1, leftOvers, leftPrev);
+
+		} else if ((returnToNode = isOr(level, leftOvers)) != null) {
+			prevNode = process(right, level + 1, leftOvers, returnToNode);
+		} else {
+			prevNode = process(right, level + 1, leftOvers, prevNode);
+		}
+
+		if (rightElOp != null && ("+".equals(rightElOp) || "*".equals(rightElOp))) {
+			final List<TransitionEdge> outgoingEdges = getOutgoingEdges(rightPrev, null);
+			for (final TransitionEdge outgoingEdge : outgoingEdges) {
+				addRegularEdge(outgoingEdge.getLabel(), prevNode, outgoingEdge.to(), true);
 			}
-			
-			if (rightElOp != null && ("+".equals(rightElOp) || "*".equals(rightElOp))) {
-				final List<TransitionEdge> outgoingEdges = getOutgoingEdges(rightPrev, null);
-				for (final TransitionEdge outgoingEdge : outgoingEdges) {
-					addRegularEdge(outgoingEdge.getLabel(), prevNode, outgoingEdge.to(), true);
-				}
+		}
+
+		if (leftElOp != null && ("?".equals(leftElOp) || "*".equals(leftElOp))) {
+			setAcceptingState(leftPrev);
+			final List<TransitionEdge> outgoingEdges = getOutgoingEdges(rightPrev, null);
+			for (final TransitionEdge outgoingEdge : outgoingEdges) {
+				setAcceptingState(outgoingEdge.to());
+				addRegularEdge(outgoingEdge.getLabel(), leftPrev, outgoingEdge.to(), true);
 			}
+		}
+		if (rightElOp != null && ("?".equals(rightElOp) || "*".equals(rightElOp))) {
+			setAcceptingState(rightPrev);
 			if (leftOvers.containsKey(level)) {
-				for (Entry<String, StateNode> entry : leftOvers.get(level).stream().filter(e -> "*".equals(e.getKey()) || "?".equals(e.getKey())).collect(Collectors.toList())) {
-					addRegularEdge(right, entry.getValue(), prevNode, isOptional);
-				}
+				leftOvers.get(level).stream().filter(e -> "*".equals(e.getKey()) || "?".equals(e.getKey())).forEach(e -> setAcceptingState(e.getValue()));
 			}
-			StateNode returnToNode = null;
-			if ((returnToNode = isQM(level, leftOvers)) != null) {
-				addRegularEdge(right, returnToNode, prevNode, true);
-			}
-		} else if (!(left instanceof Order || left instanceof SimpleOrder) && (right instanceof Order || right instanceof SimpleOrder)) {
-			StateNode leftPrev = null;
-			leftPrev = prevNode;
-			prevNode = addRegularEdge(left, prevNode, null);
+		}
+	}
 
-			if (leftElOp != null && ("+".equals(leftElOp) || "*".equals(leftElOp))) {
-				addRegularEdge(left, prevNode, prevNode);
-			}
-
-			final StateNode rightPrev = prevNode;
-			StateNode returnToNode = null;
-			if (rightElOp != null && ("?".equals(rightElOp) || "*".equals(rightElOp))) {
-				setAcceptingState(rightPrev);
-			}
-			if ("|".equals(orderOp)) {
-				setAcceptingState(prevNode);
-				SimpleEntry<String, StateNode> entry = new HashMap.SimpleEntry<>(orderOp, prevNode);
-				leftOvers.put(level + 1, entry);
-				prevNode = process(right, level + 1, leftOvers, leftPrev);
-
-			} else if ((returnToNode = isOr(level, leftOvers)) != null) {
-				prevNode = process(right, level + 1, leftOvers, returnToNode);
-			} else {
-				prevNode = process(right, level + 1, leftOvers, prevNode);
-			}
-
-			if (rightElOp != null && ("+".equals(rightElOp) || "*".equals(rightElOp))) {
-				final List<TransitionEdge> outgoingEdges = getOutgoingEdges(rightPrev, null);
-				for (final TransitionEdge outgoingEdge : outgoingEdges) {
-					addRegularEdge(outgoingEdge.getLabel(), prevNode, outgoingEdge.to(), true);
-				}
-			}
-
-			if (leftElOp != null && ("?".equals(leftElOp) || "*".equals(leftElOp))) {
-				setAcceptingState(leftPrev);
-				final List<TransitionEdge> outgoingEdges = getOutgoingEdges(rightPrev, null);
+	private void leftBranchIsOrderWhileRightIsNot(int level, Multimap<Integer, Entry<String, StateNode>> leftOvers, StateNode prevNode, Expression left, Expression right, String rightElOp, String orderOp) {
+		final StateNode leftPrev = prevNode;
+		prevNode = process(left, level + 1, leftOvers, prevNode);
+		final StateNode rightPrev = prevNode;
+		if ("|".equals(orderOp)) {
+			prevNode = addRegularEdge(right, leftPrev, prevNode);
+		} else {
+			prevNode = addRegularEdge(right, prevNode, null);
+		}
+		for (Entry<String, StateNode> a : leftOvers.get(level).stream().filter(e -> "*".equals(e.getKey())).collect(Collectors.toList())) {
+			addRegularEdge(right, a.getValue(), prevNode, true);
+		}
+		boolean isOptional = "*".equals(rightElOp) || "?".equals(rightElOp);
+		if (isOptional) {
+			setAcceptingState(rightPrev);
+			if ("?".equals(left.getRight().getElementop()) || "*".equals(left.getRight().getElementop())) {
+				final List<TransitionEdge> outgoingEdges = getOutgoingEdges(leftPrev, null);
 				for (final TransitionEdge outgoingEdge : outgoingEdges) {
 					setAcceptingState(outgoingEdge.to());
-					addRegularEdge(outgoingEdge.getLabel(), leftPrev, outgoingEdge.to(), true);
 				}
 			}
-			if (rightElOp != null && ("?".equals(rightElOp) || "*".equals(rightElOp))) {
-				setAcceptingState(rightPrev);
-				if (leftOvers.containsKey(level)) {
-					leftOvers.get(level).stream().filter(e -> "*".equals(e.getKey()) || "?".equals(e.getKey())).forEach(e -> setAcceptingState(e.getValue()));
+		}
+
+		if (rightElOp != null && ("+".equals(rightElOp) || "*".equals(rightElOp))) {
+			final List<TransitionEdge> outgoingEdges = getOutgoingEdges(rightPrev, null);
+			for (final TransitionEdge outgoingEdge : outgoingEdges) {
+				addRegularEdge(outgoingEdge.getLabel(), prevNode, outgoingEdge.to(), true);
+			}
+		}
+		if (leftOvers.containsKey(level)) {
+			for (Entry<String, StateNode> entry : leftOvers.get(level).stream().filter(e -> "*".equals(e.getKey()) || "?".equals(e.getKey())).collect(Collectors.toList())) {
+				addRegularEdge(right, entry.getValue(), prevNode, isOptional);
+			}
+		}
+		StateNode returnToNode = null;
+		if ((returnToNode = isQM(level, leftOvers)) != null) {
+			addRegularEdge(right, returnToNode, prevNode, true);
+		}
+	}
+
+	private void bothBranchesAreOrderInstances(int level,
+											   Multimap<Integer, Entry<String, StateNode>> leftOvers,
+											   StateNode prevNode,
+											   Expression left,
+											   Expression right,
+											   String leftElOp,
+											   String rightElOp,
+											   String orderOp)
+	{
+		final StateNode leftPrev = prevNode;
+		prevNode = process(left, level + 1, leftOvers, prevNode);
+		final StateNode rightPrev = prevNode;
+		if ("|".equals(orderOp)) {
+			prevNode = process(right, level + 1, leftOvers, leftPrev);
+		} else {
+			prevNode = process(right, level + 1, leftOvers, prevNode);
+		}
+		for (Entry<String, StateNode> a : leftOvers.get(level).stream().filter(e -> "?".equals(e.getKey())).collect(Collectors.toList())) {
+			if ("*".equals(rightElOp) || "?".equals(rightElOp)) {
+				setAcceptingState(a.getValue());
+				for (TransitionEdge l : getOutgoingEdges(rightPrev, null)) {
+					addRegularEdge(l.getLabel(), a.getValue(), l.getRight(), true);
 				}
 			}
+		}
 
-		} else if (!(left instanceof Order || left instanceof SimpleOrder) && !(right instanceof Order || right instanceof SimpleOrder)) {
-			StateNode leftPrev = null;
-			leftPrev = prevNode;
-			StateNode returnToNode = isOr(level, leftOvers);
-
-			final boolean leftOptional = "?".equals(leftElOp) || "*".equals(leftElOp);
-			prevNode = addRegularEdge(left, prevNode, null, leftOptional);
-
-			if (leftElOp != null && ("+".equals(leftElOp) || "*".equals(leftElOp))) {
-				addRegularEdge(left, prevNode, prevNode, true);
-			}
-
-			final boolean rightoptional = "?".equals(rightElOp) || "*".equals(rightElOp);
-			if (returnToNode != null || "|".equals(orderOp)) {
-				if ("|".equals(orderOp)) {
-					addRegularEdge(right, leftPrev, prevNode, rightoptional);
-				}
-				if ((returnToNode = isOr(level, leftOvers)) != null) {
-					prevNode = addRegularEdge(right, prevNode, returnToNode, rightoptional);
-				}
+		if ("*".equals(rightElOp) || "?".equals(rightElOp)) {
+			setAcceptingState(rightPrev);
+		}
+		if (rightElOp != null && ("+".equals(rightElOp) || "*".equals(rightElOp))) {
+			final String orderop = right.getOrderop();
+			List<TransitionEdge> outgoingEdges = null;
+			if (orderop != null && "|".equals(orderop)) {
+				outgoingEdges = getOutgoingEdges(rightPrev, null);
 			} else {
-				prevNode = addRegularEdge(right, prevNode, null, rightoptional);
+				outgoingEdges = getOutgoingEdges(rightPrev, prevNode);
 			}
+			for (final TransitionEdge outgoingEdge : outgoingEdges) {
+				addRegularEdge(outgoingEdge.getLabel(), prevNode, outgoingEdge.to(), true);
+			}
+		}
 
-			if (rightElOp != null && ("+".equals(rightElOp) || "*".equals(rightElOp))) {
-				addRegularEdge(right, prevNode, prevNode, true);
-			}
+		if (leftElOp != null && ("?".equals(leftElOp) || "*".equals(leftElOp))) {
+			addRegularEdge(right, leftPrev, prevNode, true);
+		}
+	}
 
-			if (leftElOp != null && ("?".equals(leftElOp) || "*".equals(leftElOp))) {
-				addRegularEdge(right, leftPrev, prevNode, true);
-			}
+	private void isLeafNode(Expression curLevel, StateNode prevNode) {
+		final String elOp = curLevel.getElementop();
+		if ("*".equals(elOp) || "?".equals(elOp)) {
+			prevNode = addRegularEdge(curLevel, prevNode, null, true);
+		} else {
+			addRegularEdge(curLevel, prevNode, null);
+		}
+		if ("*".equals(elOp) || "+".equals(elOp)) {
+			addRegularEdge(curLevel, prevNode, prevNode, true);
 		}
 	}
 

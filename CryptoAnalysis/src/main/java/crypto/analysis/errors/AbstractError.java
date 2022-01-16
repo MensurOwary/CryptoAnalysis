@@ -7,8 +7,8 @@ import soot.jimple.internal.JReturnStmt;
 import soot.jimple.internal.JReturnVoidStmt;
 
 public abstract class AbstractError implements IError{
-	private Statement errorLocation;
-	private CrySLRule rule;
+	private final Statement errorLocation;
+	private final CrySLRule rule;
 	private final String outerMethod;
 	private final String invokeMethod;
 	private final String declaringClass;
@@ -81,10 +81,7 @@ public abstract class AbstractError implements IError{
 		} else if (!outerMethod.equals(other.outerMethod))
 			return false;
 		if (rule == null) {
-			if (other.rule != null)
-				return false;
-		} else if (!rule.equals(other.rule))
-			return false;
-		return true;
+			return other.rule == null;
+		} else return rule.equals(other.rule);
 	}
 }

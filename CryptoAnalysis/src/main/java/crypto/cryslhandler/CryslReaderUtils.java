@@ -1,31 +1,19 @@
 package crypto.cryslhandler;
 
+import crypto.rules.CrySLMethod;
+import de.darmstadt.tu.crossing.crySL.*;
+import de.darmstadt.tu.crossing.crySL.impl.ObjectDeclImpl;
+
 import java.util.AbstractMap.SimpleEntry;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map.Entry;
 
-import crypto.rules.CrySLMethod;
-import crypto.rules.CrySLRule;
-import de.darmstadt.tu.crossing.crySL.Aggregate;
-import de.darmstadt.tu.crossing.crySL.Event;
-import de.darmstadt.tu.crossing.crySL.Method;
-import de.darmstadt.tu.crossing.crySL.ObjectDecl;
-import de.darmstadt.tu.crossing.crySL.Par;
-import de.darmstadt.tu.crossing.crySL.ParList;
-import de.darmstadt.tu.crossing.crySL.SuperType;
-
 public class CryslReaderUtils {
-	public static final String outerFileSeparator = System.getProperty("file.separator");
-	public static final String innerFileSeparator = "/";
+
 	protected static List<CrySLMethod> resolveAggregateToMethodeNames(final Event leaf) {
 		if (leaf instanceof Aggregate) {
-			final Aggregate ev = (Aggregate) leaf;
-			return dealWithAggregate(ev);
+			return dealWithAggregate((Aggregate) leaf);
 		} else {
 			final ArrayList<CrySLMethod> statements = new ArrayList<>();
 			CrySLMethod stringifyMethodSignature = stringifyMethodSignature(leaf);
@@ -53,13 +41,15 @@ public class CryslReaderUtils {
 		}
 		final Method method = ((SuperType) lab).getMeth();
 		
-//		String methodName = method.getMethName().getSimpleName();
-//		if (methodName == null) {
-//			// TODO: this part is hazardous
-//			methodName = ((de.darmstadt.tu.crossing.crySL.Domainmodel) (method.eContainer().eContainer().eContainer())).getJavaType().getSimpleName();
-//		}
-		final String qualifiedName = method.getMethName().getQualifiedName();
-		// qualifiedName = removeSPI(qualifiedName);
+		final String qualifiedName;
+		if (method.getMethName().getSimpleName() != null) {
+			final String fqClassName = ((ObjectDeclImpl) method.getInvokedObject().eContainer()).getObjectType().getIdentifier();
+			final String methodName = method.getMethName().getSimpleName();
+			qualifiedName = String.format("%s.%s", fqClassName, methodName);
+		} else {
+			qualifiedName = method.getMethName().getQualifiedName();
+		}
+
 		final List<Entry<String, String>> pars = new ArrayList<>();
 		final de.darmstadt.tu.crossing.crySL.Object returnValue = method.getLeftSide();
 		Entry<String, String> returnObject = null;
@@ -86,8 +76,5 @@ public class CryslReaderUtils {
 		return new CrySLMethod(qualifiedName, pars, new ArrayList<Boolean>(), returnObject);
 	}
 	
-	public static File getResourceFromWithin(final String inputPath) {
-		return new File(inputPath);
-	}
 }
 

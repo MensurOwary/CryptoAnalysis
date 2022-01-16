@@ -38,19 +38,23 @@ public abstract class CryptoScanner {
     private CrySLResultsReporter resultsAggregator = new CrySLResultsReporter();
     private static final Logger logger = LoggerFactory.getLogger(CryptoScanner.class);
 
-    private DefaultValueMap<Node<Statement, Val>, AnalysisSeedWithEnsuredPredicate> seedsWithoutSpec = new DefaultValueMap<Node<Statement, Val>, AnalysisSeedWithEnsuredPredicate>() {
+    private final DefaultValueMap<Node<Statement, Val>, AnalysisSeedWithEnsuredPredicate> seedsWithoutSpec =
+            new DefaultValueMap<Node<Statement, Val>, AnalysisSeedWithEnsuredPredicate>() {
+                @Override
+                protected AnalysisSeedWithEnsuredPredicate createItem(Node<Statement, Val> key) {
+                    return new AnalysisSeedWithEnsuredPredicate(CryptoScanner.this, key);
+                }
+            };
 
-        @Override
-        protected AnalysisSeedWithEnsuredPredicate createItem(Node<Statement, Val> key) {
-            return new AnalysisSeedWithEnsuredPredicate(CryptoScanner.this, key);
-        }
-    };
     private DefaultValueMap<AnalysisSeedWithSpecification, AnalysisSeedWithSpecification> seedsWithSpec =
             new DefaultValueMap<AnalysisSeedWithSpecification, AnalysisSeedWithSpecification>() {
 
                 @Override
                 protected AnalysisSeedWithSpecification createItem(AnalysisSeedWithSpecification key) {
-                    return new AnalysisSeedWithSpecification(CryptoScanner.this, key.stmt(), key.var(), key.getSpec(), key.getRelatedVariables());
+                    return new AnalysisSeedWithSpecification(
+                            CryptoScanner.this,
+                            key.stmt(), key.var(), key.getSpec(),
+                            key.getRelatedVariables());
                 }
             };
     private int solvedObject;
@@ -135,13 +139,14 @@ public abstract class CryptoScanner {
         }
         System.out.println("====WORKLIST START===");
         for (IAnalysisSeed iAnalysisSeed : worklist) {
-            System.out.println(iAnalysisSeed.var() + " => " + iAnalysisSeed.weight());
+            System.out.println(iAnalysisSeed.var() + " => " + iAnalysisSeed.weight() + " => " + iAnalysisSeed.getRelatedVariables().stream().map(Val::value).collect(Collectors.toList()));
         }
         System.out.println("====WORKLIST END===");
     }
 
     /**
      * This method finds relevant variables to the targetVariable, given the analyzed method and FSM
+     *
      * @return a collection of relevant variables excluding the targetVariable itself
      */
     private Collection<Val> findRelevantVariables(SootMethod method, Value targetVariable, SootBasedStateMachineGraph fsm) {
@@ -159,9 +164,11 @@ public abstract class CryptoScanner {
                 relevantMethodUsingStatements.add(((Stmt) unit));
             }
         }
+        final Set<Value> seen = new HashSet<>();
 
         Queue<Value> variables = new LinkedList<>();
         variables.add(targetVariable);
+        seen.add(targetVariable);
 
         Set<Value> saved = new HashSet<>();
 
@@ -199,7 +206,12 @@ public abstract class CryptoScanner {
             // self remove
             relevantVariables.remove(v);
 
-            variables.addAll(relevantVariables);
+            for (Value relevantVariable : relevantVariables) {
+                if (!seen.contains(relevantVariable)) {
+                    variables.add(relevantVariable);
+                    seen.add(relevantVariable);
+                }
+            }
         }
         saved.remove(targetVariable);
         return saved.stream().map(value -> new Val(value, method)).collect(Collectors.toSet());

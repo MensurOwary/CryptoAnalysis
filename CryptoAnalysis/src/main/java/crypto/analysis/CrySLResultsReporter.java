@@ -148,7 +148,7 @@ public class CrySLResultsReporter  {
 	}
 	
 	public void reportError(IAnalysisSeed object, AbstractError err) {
-		if (object != null && object instanceof AnalysisSeedWithSpecification) {
+		if (object instanceof AnalysisSeedWithSpecification) {
 			((AnalysisSeedWithSpecification) object).setSecure(false);
 		}
 		for (ICrySLResultsListener listen : listeners) {

@@ -19,7 +19,7 @@ import boomerang.results.ForwardBoomerangResults;
 import crypto.analysis.errors.IncompleteOperationError;
 import crypto.analysis.errors.TypestateError;
 import crypto.constraints.ConstraintSolver;
-import crypto.constraints.ConstraintSolver.EvaluableConstraint;
+import crypto.constraints.EvaluableConstraint;
 import crypto.extractparameter.CallSiteWithParamIndex;
 import crypto.extractparameter.ExtractParameterAnalysis;
 import crypto.extractparameter.ExtractedValue;
@@ -41,18 +41,13 @@ import soot.SootMethod;
 import soot.Type;
 import soot.Unit;
 import soot.Value;
-import soot.jimple.AssignStmt;
-import soot.jimple.Constant;
-import soot.jimple.IntConstant;
-import soot.jimple.InvokeExpr;
-import soot.jimple.Stmt;
-import soot.jimple.StringConstant;
-import soot.jimple.ThrowStmt;
+import soot.jimple.*;
 import sync.pds.solver.nodes.Node;
 import typestate.TransitionFunction;
 import typestate.finiteautomata.ITransition;
 import typestate.finiteautomata.State;
 
+import static crypto.constraints.ConstraintSolver.PREDEFINED_PREDICATE_NAMES;
 import static java.util.stream.Collectors.groupingBy;
 
 public class AnalysisSeedWithSpecification extends IAnalysisSeed {
@@ -120,6 +115,7 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
 			// Timeout occured.
 			return;
 		allCallsOnObject = results.getInvokedMethodOnInstance();
+		getAllCallsOnObjectBackward();
 		runExtractParameterAnalysis();
 		checkInternalConstraints();
 
@@ -134,10 +130,32 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
 		}
 
 		computeTypestateErrorUnits();
-		computeTypestateErrorsForEndOfObjectLifeTime(); //TODO: ignored for now
+		computeTypestateErrorsForEndOfObjectLifeTime();
 
 		cryptoScanner.getAnalysisListener().onSeedFinished(this, results);
 		cryptoScanner.getAnalysisListener().collectedValues(this, parameterAnalysis.getCollectedValues());
+	}
+
+	/**
+	 * Adds the methods invoked on the instance until the current stmt to the allCallsOnObject
+	 * Originally, only the ones after were added
+	 */
+	private void getAllCallsOnObjectBackward() {
+		final Statement stmt = this.stmt();
+		final Value value = this.var().value();
+
+		for (Unit unit : stmt.getMethod().getActiveBody().getUnits()) {
+			if (!(unit instanceof Stmt) || !((Stmt) unit).containsInvokeExpr()) continue;
+
+			InvokeExpr expr = ((Stmt) unit).getInvokeExpr();
+			final SootMethod invokedMethod = expr.getMethod();
+
+			final boolean methodIsInvokedOnVariable = expr instanceof InstanceInvokeExpr &&
+					((InstanceInvokeExpr) expr).getBase().equals(value);
+			if (methodIsInvokedOnVariable) {
+				allCallsOnObject.put(new Statement(((Stmt) unit), stmt.getMethod()), invokedMethod);
+			}
+		}
 	}
 
 	private void checkInternalConstraints() {
@@ -386,7 +404,7 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
 	private boolean checkPredicates(Collection<ISLConstraint> relConstraints) {
 		List<ISLConstraint> requiredPredicates = Lists.newArrayList();
 		for (ISLConstraint con : constraintSolver.getRequiredPredicates()) {
-			if (!ConstraintSolver.predefinedPreds.contains((con instanceof RequiredCrySLPredicate) ? ((RequiredCrySLPredicate) con).getPred().getPredName()
+			if (!PREDEFINED_PREDICATE_NAMES.contains((con instanceof RequiredCrySLPredicate) ? ((RequiredCrySLPredicate) con).getPred().getPredName()
 					: ((AlternativeReqPredicate) con).getAlternatives().get(0).getPredName())) {
 				requiredPredicates.add(con);
 			}

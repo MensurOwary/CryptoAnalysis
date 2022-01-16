@@ -31,17 +31,7 @@ import crypto.analysis.CrySLRulesetSelector.Ruleset;
 import crypto.analysis.CryptoScanner;
 import crypto.analysis.EnsuredCrySLPredicate;
 import crypto.analysis.IAnalysisSeed;
-import crypto.analysis.errors.AbstractError;
-import crypto.analysis.errors.ConstraintError;
-import crypto.analysis.errors.ErrorVisitor;
-import crypto.analysis.errors.ForbiddenMethodError;
-import crypto.analysis.errors.HardCodedError;
-import crypto.analysis.errors.ImpreciseValueExtractionError;
-import crypto.analysis.errors.IncompleteOperationError;
-import crypto.analysis.errors.NeverTypeOfError;
-import crypto.analysis.errors.PredicateContradictionError;
-import crypto.analysis.errors.RequiredPredicateError;
-import crypto.analysis.errors.TypestateError;
+import crypto.analysis.errors.*;
 import crypto.exceptions.CryptoAnalysisException;
 import crypto.extractparameter.CallSiteWithParamIndex;
 import crypto.extractparameter.ExtractedValue;
@@ -211,6 +201,11 @@ public abstract class UsagePatternTestingFramework extends AbstractTestingFramew
 									@Override
 									public void visit(HardCodedError predicateError) {
 										
+									}
+
+									@Override
+									public void visit(RequiredMethodToCallError requiredMethodError) {
+										// TODO: Implement this
 									}
 								});
 							}
