@@ -46,7 +46,7 @@ public abstract class CryptoScanner {
                 }
             };
 
-    private DefaultValueMap<AnalysisSeedWithSpecification, AnalysisSeedWithSpecification> seedsWithSpec =
+    private final DefaultValueMap<AnalysisSeedWithSpecification, AnalysisSeedWithSpecification> seedsWithSpec =
             new DefaultValueMap<AnalysisSeedWithSpecification, AnalysisSeedWithSpecification>() {
 
                 @Override
@@ -222,7 +222,11 @@ public abstract class CryptoScanner {
     }
 
     protected void addToWorkList(IAnalysisSeed analysisSeedWithSpecification) {
-        worklist.add(analysisSeedWithSpecification);
+        // not considering the ones that belong to java standard library
+        final String className = analysisSeedWithSpecification.stmt().getMethod().getDeclaringClass().getName();
+        if (!(className.startsWith("java.") || className.startsWith("javax."))) {
+            worklist.add(analysisSeedWithSpecification);
+        }
     }
 
     public AnalysisSeedWithEnsuredPredicate getOrCreateSeed(Node<Statement, Val> factAtStatement) {

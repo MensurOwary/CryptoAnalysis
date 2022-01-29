@@ -22,8 +22,8 @@ import soot.jimple.Stmt;
 import typestate.TransitionFunction;
 
 public class ClassSpecification {
-	private ExtendedIDEALAnalysis extendedIdealAnalysis;
-	private CrySLRule crySLRule;
+	private final ExtendedIDEALAnalysis extendedIdealAnalysis;
+	private final CrySLRule crySLRule;
 	private final CryptoScanner cryptoScanner;
 	private final SootBasedStateMachineGraph fsm;
 

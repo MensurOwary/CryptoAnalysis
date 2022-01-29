@@ -137,7 +137,7 @@ public class CrySLMethodToSootMethod {
 		try {
 			if (Scene.v().containsClass(label))
 				return label;
-		} catch (RuntimeException e) {
+		} catch (RuntimeException ignored) {
 
 		}
 		return label.substring(0, label.lastIndexOf("."));

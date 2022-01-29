@@ -24,14 +24,14 @@ import typestate.finiteautomata.State;
 
 public class SootBasedStateMachineGraph {
 
-	private Set<MatcherTransition> transition = new HashSet<>();
-	private Collection<SootMethod> edgeLabelMethods = Sets.newHashSet();
+	private final Set<MatcherTransition> transition = new HashSet<>();
+	private final Collection<SootMethod> edgeLabelMethods = Sets.newHashSet();
 	
 	private final StateMachineGraph stateMachineGraph;
-	private Multimap<State, SootMethod> outTransitions = HashMultimap.create();
-	private Collection<SootMethod> initialTransitonLabel;
-	private List<CrySLMethod> crySLinitialTransitionLabel;
-	private LabeledMatcherTransition initialTransiton;
+	private final Multimap<State, SootMethod> outTransitions = HashMultimap.create();
+	private final Collection<SootMethod> initialTransitionLabel;
+	private final List<CrySLMethod> cryslInitialTransitionLabel;
+	private LabeledMatcherTransition initialTransition;
 
 	// INFO: class of interest
 	public SootBasedStateMachineGraph(StateMachineGraph fsm) {
@@ -45,12 +45,12 @@ public class SootBasedStateMachineGraph {
 			this.addTransition(trans);
 			outTransitions.putAll(from, convert(t.getLabel()));
 			if(stateMachineGraph.getInitialTransition().equals(t)) {
-				this.initialTransiton = trans;
+				this.initialTransition = trans;
 			}
 		}
-		crySLinitialTransitionLabel = stateMachineGraph.getInitialTransition().getLabel();
+		cryslInitialTransitionLabel = stateMachineGraph.getInitialTransition().getLabel();
 		
-		initialTransitonLabel = convert(stateMachineGraph.getInitialTransition().getLabel());
+		initialTransitionLabel = convert(stateMachineGraph.getInitialTransition().getLabel());
 		//All transitions that are not in the state machine 
 		for(StateNode t :  this.stateMachineGraph.getNodes()){
 			State wrapped = wrappedState(t);
@@ -70,13 +70,9 @@ public class SootBasedStateMachineGraph {
 		
 	}
 
-	
-
 	private WrappedState wrappedState(StateNode t) {
 		return new WrappedState(t, stateMachineGraph.getInitialTransition().from().equals(t));
 	}
-
-
 
 	public Collection<SootMethod> getEdgesOutOf(State n){
 		return outTransitions.get(n);
@@ -91,26 +87,23 @@ public class SootBasedStateMachineGraph {
 		return converted;
 	}
 
-
 	public Collection<SootMethod> getInvolvedMethods(){
 		return Sets.newHashSet(edgeLabelMethods);
 	}
 	
-
 	public TransitionFunction getInitialWeight(Statement stmt) {
-		return new TransitionFunction(initialTransiton,Collections.singleton(stmt));
+		return new TransitionFunction(initialTransition,Collections.singleton(stmt));
 	}
 
 	public List<MatcherTransition> getAllTransitions() {
 		return Lists.newArrayList(transition);
 	}
 
-	public Collection<SootMethod> initialTransitonLabel() {
-		return Lists.newArrayList(initialTransitonLabel);
+	public Collection<SootMethod> initialTransitionLabel() {
+		return Lists.newArrayList(initialTransitionLabel);
 	}
 
-
 	public List<CrySLMethod> getInitialTransition() {
-		return crySLinitialTransitionLabel;
+		return cryslInitialTransitionLabel;
 	}
 }

@@ -1,5 +1,6 @@
 package crypto.constraints;
 
+import boomerang.callgraph.ObservableDynamicICFG;
 import boomerang.jimple.Statement;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
@@ -16,16 +17,18 @@ import crypto.rules.CrySLConstraint;
 import crypto.rules.CrySLPredicate;
 import crypto.rules.CrySLValueConstraint;
 import soot.Type;
+import soot.jimple.Stmt;
+import soot.jimple.toolkits.callgraph.CallGraph;
+import soot.jimple.toolkits.callgraph.Edge;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 public class ConstraintSolver {
 
-    public final static List<String> PREDEFINED_PREDICATE_NAMES = Arrays.asList("callTo", "noCallTo", "neverTypeOf", "length", "notHardCoded", "instanceOf", "callToEarlier");
+    public final static List<String> PREDEFINED_PREDICATE_NAMES = Arrays.asList("callTo", "noCallTo", "neverTypeOf", "length", "notHardCoded", "instanceOf");
 
     private final Set<ISLConstraint> relConstraints = Sets.newHashSet();
     private final List<ISLConstraint> requiredPredicates = Lists.newArrayList();
@@ -158,5 +161,19 @@ public class ConstraintSolver {
         return requiredPredicates;
     }
 
+    public void calculateStuff(ObservableDynamicICFG icfg, Statement stmt) {
+        for (Statement collectedCall : collectedCalls) {
+            final Stmt stmt2 = collectedCall.getUnit().get();
+
+            final CallGraph graph = icfg.getPrecomputedCallGraph();
+            final Iterator<Edge> edgesOutOf = graph.edgesOutOf(stmt2);
+            Iterable<Edge> outOf = () -> edgesOutOf;
+            final List<Edge> allOutOf = StreamSupport.stream(outOf.spliterator(), false).collect(Collectors.toList());
+
+            final Iterator<Edge> edgesInto = graph.edgesInto(collectedCall.getMethod());
+            Iterable<Edge> into = () -> edgesInto;
+            final List<Edge> allInto = StreamSupport.stream(into.spliterator(), false).collect(Collectors.toList());
+        }
+    }
 
 }

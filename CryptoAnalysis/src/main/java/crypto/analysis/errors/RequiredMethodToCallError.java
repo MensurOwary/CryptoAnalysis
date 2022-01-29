@@ -6,42 +6,21 @@ import crypto.rules.CrySLRule;
 import soot.SootMethod;
 
 import java.util.Collection;
-import java.util.HashSet;
-import java.util.Objects;
 import java.util.Set;
 
-import static crypto.analysis.errors.ErrorUtils.getCalledMethodString;
 import static crypto.analysis.errors.ErrorUtils.useSignatures;
-import static crypto.constraints.PredicateConstraint.getLineNumber;
 import static java.util.stream.Collectors.toSet;
 
 public class RequiredMethodToCallError extends AbstractError {
 
     private final Collection<SootMethod> expectedMethodCalls;
-    private final Mode mode;
 
-    public enum Mode {
-        BEFORE("Method(s) [%s] should be called before %s"), 
-        AFTER("Method(s) [%s] should be called after %s"),
-        NONE("Method(s) [%s] should also be called when %s is called");
-
-        private final String message;
-
-        Mode(String message) {
-            this.message = message;
-        }
-
-        public String getMessage(Collection<String> expectedMethods, String targetMethod) {
-            return String.format(this.message, Joiner.on(",").join(expectedMethods), targetMethod);
-        }
-    }
-
-    public RequiredMethodToCallError(Statement errorLocation, Collection<SootMethod> expectedMethodCalls, CrySLRule rule, Mode mode) {
+    public RequiredMethodToCallError(Statement errorLocation, Collection<SootMethod> expectedMethodCalls, CrySLRule rule) {
         super(errorLocation, rule);
-        if (expectedMethodCalls == null || expectedMethodCalls.isEmpty()) throw new IllegalArgumentException("expectedMethodCalls cannot be empty");
-
+        if (expectedMethodCalls == null || expectedMethodCalls.isEmpty()) {
+            throw new IllegalArgumentException("expectedMethodCalls cannot be empty");
+        }
         this.expectedMethodCalls = expectedMethodCalls;
-        this.mode = mode;
     }
 
     @Override
@@ -53,7 +32,13 @@ public class RequiredMethodToCallError extends AbstractError {
                 .map(method -> method.replace("<", "").replace(">", ""))
                 .collect(toSet());
 
-        return this.mode.getMessage(altMethods, getCalledMethodString(getErrorLocation(), useSignatures));
+        // final String calledMethodString = getCalledMethodString(getErrorLocation(), useSignatures);
+        return this.getMessage(altMethods);
+    }
+
+    private String getMessage(Collection<String> expectedMethods) {
+        return String.format("Method(s) [%s] were expected to be called",
+                Joiner.on(",").join(expectedMethods));
     }
 
     @Override
@@ -67,8 +52,7 @@ public class RequiredMethodToCallError extends AbstractError {
         if (o == null || getClass() != o.getClass()) return false;
         if (!super.equals(o)) return false;
         RequiredMethodToCallError that = (RequiredMethodToCallError) o;
-        if (getLineNumber(this.getErrorLocation()) != getLineNumber(that.getErrorLocation())) return false;
-        return expectedMethodCalls.equals(that.expectedMethodCalls) && mode == that.mode;
+        return expectedMethodCalls.equals(that.expectedMethodCalls);
     }
 
     @Override
@@ -76,8 +60,6 @@ public class RequiredMethodToCallError extends AbstractError {
         final int prime = 31;
         int result = super.hashCode();
         result = prime * result + ((expectedMethodCalls.isEmpty()) ? 0 : expectedMethodCalls.hashCode());
-        result = prime * result + mode.hashCode();
-        result = prime * result + getLineNumber(this.getErrorLocation());
         return result;
     }
 }

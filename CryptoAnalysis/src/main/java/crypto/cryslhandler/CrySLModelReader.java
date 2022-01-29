@@ -592,7 +592,6 @@ public class CrySLModelReader {
 		ISLConstraint slci = null;
 		switch (pred) {
 			case "callTo":
-			case "callToEarlier":
 				final List<ICrySLPredicateParameter> methodsToBeCalled = new ArrayList<>();
 				methodsToBeCalled.addAll(CryslReaderUtils.resolveAggregateToMethodeNames(((PreDefinedPredicates) lit.getCons()).getObj().get(0)));
 				slci = new CrySLPredicate(null, pred, methodsToBeCalled, false);

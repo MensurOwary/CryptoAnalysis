@@ -1,7 +1,6 @@
 package crypto.typestate;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -37,8 +36,13 @@ public class FiniteStateMachineToTypestateChangeFunction extends TypeStateMachin
         if (!(unit instanceof Stmt) || !((Stmt) unit).containsInvokeExpr()) return emptySet();
         InvokeExpr invokeExpr = ((Stmt) unit).getInvokeExpr();
         SootMethod calledMethod = invokeExpr.getMethod();
-		if (!fsm.initialTransitonLabel().contains(calledMethod)) return emptySet();
+		if (!fsm.initialTransitionLabel().contains(calledMethod)) return emptySet();
 //        if (!fsm.getInvolvedMethods().contains(calledMethod)) return emptySet();
+
+//        boolean isFirstTransition = fsm.initialTransitionLabel().contains(calledMethod);
+//        if (!isFirstTransition) {
+//            if (!fsm.getInvolvedMethods().contains(calledMethod)) return emptySet();
+//        }
 
         Set<WeightedForwardQuery<TransitionFunction>> forwardQueries = new HashSet<>();
         if (calledMethod.isStatic()) {

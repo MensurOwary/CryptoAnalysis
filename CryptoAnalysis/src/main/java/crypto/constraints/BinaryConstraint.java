@@ -31,14 +31,6 @@ class BinaryConstraint extends EvaluableConstraint {
         if (ops.equals(CrySLConstraint.LogOps.implies)) {
             // if the left holds, evaluate the right side
             if (!left.hasErrors()) {
-                // INFO: basically we run the left callTo[X] and if there's a call to X, we save that statement
-                // INFO: and pass it to the right hand of callTo[Y]
-                // TODO: might be a better way
-                if (left instanceof PredicateConstraint && right instanceof PredicateConstraint) {
-                    final PredicateConstraint pCLeft = (PredicateConstraint) left;
-                    final PredicateConstraint pCRight = (PredicateConstraint) right;
-                    pCRight.setPreviousStmt(pCLeft.getStmt());
-                }
                 right.evaluate();
                 errors.addAll(right.getErrors());
                 return;
