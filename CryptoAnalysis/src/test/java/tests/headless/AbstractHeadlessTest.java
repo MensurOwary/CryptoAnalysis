@@ -1,6 +1,7 @@
 package tests.headless;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
@@ -91,8 +92,8 @@ public abstract class AbstractHeadlessTest {
 			@Override
 			protected List<CrySLRule> getRules() {
 				try {
-					List<CrySLRule> rules = Lists.newArrayList();
-					rules = CrySLRulesetSelector.makeFromRuleset(IDEALCrossingTestingFramework.RULES_BASE_DIR, ruleFormat, ruleset);
+					List<CrySLRule> rules = CrySLRulesetSelector
+							.makeFromRuleset(IDEALCrossingTestingFramework.RULES_BASE_DIR, ruleFormat, ruleset);
 					HeadlessCryptoScanner.setRules(rules);
 					return rules;
 				} catch (CryptoAnalysisException e) {

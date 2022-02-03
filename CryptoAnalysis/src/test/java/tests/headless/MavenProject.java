@@ -33,7 +33,7 @@ public class MavenProject {
 	public void compile(){
 		InvocationRequest request = new DefaultInvocationRequest();
 	    request.setPomFile( new File(pathToProjectRoot+File.separator+"pom.xml" ) );
-	    ArrayList<String> goals = Lists.newArrayList();
+	    ArrayList<String> goals = new ArrayList<>();
 	    goals.add("clean");
 	    goals.add("compile");
 	    request.setGoals(goals);
@@ -56,7 +56,7 @@ public class MavenProject {
 	private void computeClassPath() {
 		InvocationRequest request = new DefaultInvocationRequest();
 	    request.setPomFile( new File(pathToProjectRoot+File.separator+"pom.xml" ) );
-	    ArrayList<String> goals = Lists.newArrayList();
+	    ArrayList<String> goals = new ArrayList<>();
 	    goals.add("dependency:build-classpath");
 	    goals.add("-Dmdep.outputFile=\"classPath.temp\"");
 	    try (ByteArrayOutputStream baos = new ByteArrayOutputStream();

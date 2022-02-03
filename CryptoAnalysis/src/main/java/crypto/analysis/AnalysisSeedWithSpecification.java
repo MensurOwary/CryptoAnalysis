@@ -4,54 +4,36 @@ import java.util.*;
 import java.util.Map.Entry;
 import java.util.stream.Collectors;
 
+import boomerang.BackwardQuery;
+import boomerang.Boomerang;
+import boomerang.DefaultBoomerangOptions;
 import boomerang.callgraph.ObservableDynamicICFG;
-import com.google.common.collect.HashMultimap;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Multimap;
-import com.google.common.collect.Sets;
-import com.google.common.collect.Table;
+import boomerang.results.BackwardBoomerangResults;
+import boomerang.seedfactory.SeedFactory;
+import boomerang.util.AccessPath;
+import com.google.common.collect.*;
 import com.google.common.collect.Table.Cell;
 import boomerang.callgraph.ObservableICFG;
 import boomerang.debugger.Debugger;
-import boomerang.jimple.AllocVal;
-import boomerang.jimple.Statement;
-import boomerang.jimple.Val;
+import boomerang.jimple.*;
 import boomerang.results.ForwardBoomerangResults;
-import crypto.analysis.errors.IncompleteOperationError;
-import crypto.analysis.errors.TypestateError;
-import crypto.constraints.ConstraintSolver;
-import crypto.constraints.EvaluableConstraint;
-import crypto.extractparameter.CallSiteWithParamIndex;
-import crypto.extractparameter.ExtractParameterAnalysis;
-import crypto.extractparameter.ExtractedValue;
-import crypto.interfaces.ICrySLPredicateParameter;
-import crypto.interfaces.ISLConstraint;
-import crypto.rules.CrySLCondPredicate;
-import crypto.rules.CrySLConstraint;
-import crypto.rules.CrySLMethod;
-import crypto.rules.CrySLObject;
-import crypto.rules.CrySLPredicate;
-import crypto.rules.StateNode;
-import crypto.rules.TransitionEdge;
+import crypto.analysis.errors.*;
+import crypto.constraints.*;
+import crypto.extractparameter.*;
+import crypto.interfaces.*;
+import crypto.rules.*;
 import crypto.typestate.*;
 import ideal.IDEALSeedSolver;
-import soot.IntType;
-import soot.Local;
-import soot.RefType;
-import soot.SootMethod;
-import soot.Type;
-import soot.Unit;
-import soot.Value;
+import soot.*;
 import soot.jimple.*;
-import soot.jimple.toolkits.callgraph.CallGraph;
 import sync.pds.solver.nodes.Node;
 import typestate.TransitionFunction;
-import typestate.finiteautomata.ITransition;
-import typestate.finiteautomata.State;
+import typestate.finiteautomata.*;
+import wpds.impl.Weight;
 
 import static crypto.constraints.ConstraintSolver.PREDEFINED_PREDICATE_NAMES;
-import static java.util.stream.Collectors.groupingBy;
+import static java.util.Collections.emptySet;
+import static java.util.stream.Collectors.*;
 
 public class AnalysisSeedWithSpecification extends IAnalysisSeed {
 
@@ -69,7 +51,7 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
     private final Set<ResultsHandler> resultHandlers = Sets.newHashSet();
     private boolean secure = true;
 
-    private boolean isFirstTransition = false;
+    private final boolean isFirstTransition;
 
     public AnalysisSeedWithSpecification(CryptoScanner cryptoScanner, Statement stmt, Val val, ClassSpecification spec) {
         this(cryptoScanner, stmt, val, spec, spec.getFSM().getInitialWeight(stmt));
@@ -120,17 +102,21 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
         // this line below literally does nothing
         cryptoScanner.getAnalysisListener().seedStarted(this);
         runTypestateAnalysis();
-        if (results == null)
+        if (results == null) {
             // Timeout occured.
             return;
+        }
         allCallsOnObject = results.getInvokedMethodOnInstance();
-//        getAllCallsOnObjectBackward();
+        doBackwardScan();
+
         runExtractParameterAnalysis();
         checkInternalConstraints();
 
         Multimap<Statement, State> unitToStates = HashMultimap.create();
         for (Cell<Statement, Val, TransitionFunction> c : results.asStatementValWeightTable().cellSet()) {
-            unitToStates.putAll(c.getRowKey(), getTargetStates(c.getValue()));
+            if (c.getValue() != null) {
+                unitToStates.putAll(c.getRowKey(), getTargetStates(c.getValue()));
+            }
             for (EnsuredCrySLPredicate pred : indirectlyEnsuredPredicates) {
                 // TODO only maintain indirectly ensured predicate as long as they are not
                 // killed by the rule
@@ -147,45 +133,36 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
         cryptoScanner.getAnalysisListener().collectedValues(this, parameterAnalysis.getCollectedValues());
     }
 
-    /**
-     * Adds the methods invoked on the instance until the current stmt to the allCallsOnObject
-     * Originally, only the ones after were added
-     */
-    private void getAllCallsOnObjectBackward() {
-        final Statement stmt = this.stmt();
-        final Value value = this.var().value();
+    private void doBackwardScan() {
+        // start the seed from the end not from this point
+        final BackwardQuery backwardQuery = new BackwardQuery(stmt(), var());
 
-        final Collection<Value> variables = allCallsOnObject.keySet().stream()
-                .filter(statement -> statement.getUnit().isPresent())
-                .map(statement -> statement.getUnit().get())
-                .filter(s -> s.containsInvokeExpr() && s.getInvokeExpr() instanceof InstanceInvokeExpr)
-                .map(s -> (InstanceInvokeExpr) s.getInvokeExpr())
-                .map(InstanceInvokeExpr::getBase)
-                .collect(Collectors.toSet());
-
-        // this is probably redundant
-        variables.add(value);
-
-        for (Unit unit : stmt.getMethod().getActiveBody().getUnits()) {
-            if (!(unit instanceof Stmt) || !((Stmt) unit).containsInvokeExpr()) continue;
-
-            InvokeExpr expr = ((Stmt) unit).getInvokeExpr();
-            final SootMethod invokedMethod = expr.getMethod();
-
-            final boolean methodIsInvokedOnVariable = expr instanceof InstanceInvokeExpr &&
-                    variables.contains(((InstanceInvokeExpr) expr).getBase());
-            if (methodIsInvokedOnVariable) {
-                allCallsOnObject.put(new Statement(((Stmt) unit), stmt.getMethod()), invokedMethod);
+        final Boomerang solver = new Boomerang(new DefaultBoomerangOptions() {
+            @Override
+            public boolean onTheFlyCallGraph() {
+                return false;
             }
-        }
+        }) {
+
+            @Override
+            public ObservableICFG<Unit, SootMethod> icfg() {
+                return cryptoScanner.icfg();
+            }
+
+        };
+
+        final BackwardBoomerangResults<Weight.NoWeight> solve = solver.solve(backwardQuery);
+        final Collection<AccessPath> allAliases = solve.getAllAliases();
+        System.out.println(allAliases.size());
     }
 
     private void checkInternalConstraints() {
         cryptoScanner.getAnalysisListener().beforeConstraintCheck(this);
-        constraintSolver = new ConstraintSolver(this, allCallsOnObject.keySet(), cryptoScanner.getAnalysisListener());
+        constraintSolver = new ConstraintSolver(this, allCallsOnObject.keySet(), stmt(), cryptoScanner.getAnalysisListener());
         cryptoScanner.getAnalysisListener().checkedConstraints(this, constraintSolver.getRelConstraints());
         internalConstraintSatisfied = (0 == constraintSolver.evaluateRelConstraints());
 
+        // TODO: remove this
         constraintSolver.calculateStuff(getIcfg(), stmt());
 
         cryptoScanner.getAnalysisListener().afterConstraintCheck(this);
@@ -221,14 +198,18 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
     private void computeTypestateErrorUnits() {
         Set<Statement> allTypestateChangeStatements = Sets.newHashSet();
         for (Cell<Statement, Val, TransitionFunction> c : results.asStatementValWeightTable().cellSet()) {
-            allTypestateChangeStatements.addAll(c.getValue().getLastStateChangeStatements());
+            if (c.getValue() != null) {
+                allTypestateChangeStatements.addAll(c.getValue().getLastStateChangeStatements());
+            }
         }
         for (Cell<Statement, Val, TransitionFunction> c : results.asStatementValWeightTable().cellSet()) {
             Statement curr = c.getRowKey();
             if (allTypestateChangeStatements.contains(curr)) {
-                Collection<? extends State> targetStates = getTargetStates(c.getValue());
-                for (State newStateAtCurr : targetStates) {
-                    typeStateChangeAtStatement(curr, newStateAtCurr);
+                if (c.getValue() != null) {
+                    Collection<? extends State> targetStates = getTargetStates(c.getValue());
+                    for (State newStateAtCurr : targetStates) {
+                        typeStateChangeAtStatement(curr, newStateAtCurr);
+                    }
                 }
             }
 
@@ -239,16 +220,18 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
         Table<Statement, Val, TransitionFunction> endPathOfPropagation = results.getObjectDestructingStatements();
         for (Cell<Statement, Val, TransitionFunction> c : endPathOfPropagation.cellSet()) {
             Set<SootMethod> expectedMethodsToBeCalled = Sets.newHashSet();
-            for (ITransition n : c.getValue().values()) {
-                if (n.to() == null)
-                    continue;
-                if (!n.to().isAccepting()) {
-                    if (n.to() instanceof WrappedState) {
-                        WrappedState wrappedState = (WrappedState) n.to();
-                        for (TransitionEdge t : spec.getRule().getUsagePattern().getAllTransitions()) {
-                            if (t.getLeft().equals(wrappedState.delegate()) && !t.from().equals(t.to())) {
-                                Collection<SootMethod> converted = CrySLMethodToSootMethod.v().convert(t.getLabel());
-                                expectedMethodsToBeCalled.addAll(converted);
+            if (c.getValue() != null) {
+                for (ITransition n : c.getValue().values()) {
+                    if (n.to() == null)
+                        continue;
+                    if (!n.to().isAccepting()) {
+                        if (n.to() instanceof WrappedState) {
+                            WrappedState wrappedState = (WrappedState) n.to();
+                            for (TransitionEdge t : spec.getRule().getUsagePattern().getAllTransitions()) {
+                                if (t.getLeft().equals(wrappedState.delegate()) && !t.from().equals(t.to())) {
+                                    Collection<SootMethod> converted = CrySLMethodToSootMethod.v().convert(t.getLabel());
+                                    expectedMethodsToBeCalled.addAll(converted);
+                                }
                             }
                         }
                     }
@@ -264,8 +247,11 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
             if (!expectedMethodsToBeCalled.isEmpty()) {
                 Statement s = c.getRowKey();
                 Val val = c.getColumnKey();
-                if (!(s.getUnit().get() instanceof ThrowStmt)) {
-                    cryptoScanner.getAnalysisListener().reportError(this, new IncompleteOperationError(s, val, getSpec().getRule(), this, expectedMethodsToBeCalled));
+                if (s != null && !(s.getUnit().isPresent() && s.getUnit().get() instanceof ThrowStmt)) {
+                    cryptoScanner.getAnalysisListener().reportError(
+                            this,
+                            new IncompleteOperationError(s, val, getSpec().getRule(), this, expectedMethodsToBeCalled)
+                    );
                 }
             }
         }
@@ -303,8 +289,6 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
         }
         boolean satisfiesConstraintSytem = checkConstraintSystem();
         if (predToBeEnsured.getConstraint() != null) {
-            ArrayList<ISLConstraint> temp = new ArrayList<>();
-            temp.add(predToBeEnsured.getConstraint());
             satisfiesConstraintSytem = !evaluatePredCond(predToBeEnsured);
         }
 
@@ -313,14 +297,17 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
                 expectPredicateWhenThisObjectIsInState(stateNode, currStmt, predToBeEnsured, satisfiesConstraintSytem);
             }
         }
-        if (currStmt.isCallsite()) {
-            InvokeExpr ie = ((Stmt) currStmt.getUnit().get()).getInvokeExpr();
+        if (currStmt.isCallsite() && currStmt.getUnit().isPresent()) {
+            InvokeExpr ie = currStmt.getUnit().get().getInvokeExpr();
             SootMethod invokedMethod = ie.getMethod();
             Collection<CrySLMethod> convert = CrySLMethodToSootMethod.v().convert(invokedMethod);
 
             for (CrySLMethod crySLMethod : convert) {
                 Entry<String, String> retObject = crySLMethod.getRetObject();
-                if (!retObject.getKey().equals("_") && currStmt.getUnit().get() instanceof AssignStmt && predicateParameterEquals(predToBeEnsured.getParameters(), retObject.getKey())) {
+                if (!retObject.getKey().equals("_")
+                        && currStmt.getUnit().get() instanceof AssignStmt
+                        && predicateParameterEquals(predToBeEnsured.getParameters(), retObject.getKey())
+                ) {
                     AssignStmt as = (AssignStmt) currStmt.getUnit().get();
                     Value leftOp = as.getLeftOp();
                     AllocVal val = new AllocVal(leftOp, currStmt.getMethod(), as.getRightOp(), new Statement(as, currStmt.getMethod()));
@@ -371,9 +358,9 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
                 }
             }
         }
-        if (matched)
-            return;
-        AnalysisSeedWithEnsuredPredicate seed = cryptoScanner.getOrCreateSeed(new Node<Statement, Val>(currStmt, accessGraph));
+        if (matched) return;
+
+        AnalysisSeedWithEnsuredPredicate seed = cryptoScanner.getOrCreateSeed(new Node<>(currStmt, accessGraph));
         predicateHandler.expectPredicate(seed, currStmt, predToBeEnsured);
         if (satisfiesConstraintSytem) {
             seed.addEnsuredPredicate(new EnsuredCrySLPredicate(predToBeEnsured, parameterAnalysis.getCollectedValues()));
@@ -422,16 +409,12 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
 
     private boolean checkConstraintSystem() {
         cryptoScanner.getAnalysisListener().beforePredicateCheck(this);
-        Set<ISLConstraint> relConstraints = constraintSolver.getRelConstraints();
-        boolean checkPredicates = checkPredicates(relConstraints);
         cryptoScanner.getAnalysisListener().afterPredicateCheck(this);
-        if (!checkPredicates)
-            return false;
-        return internalConstraintSatisfied;
+        return checkPredicates() && internalConstraintSatisfied;
     }
 
-    private boolean checkPredicates(Collection<ISLConstraint> relConstraints) {
-        List<ISLConstraint> requiredPredicates = Lists.newArrayList();
+    private boolean checkPredicates() {
+        List<ISLConstraint> requiredPredicates = new ArrayList<>();
         for (ISLConstraint con : constraintSolver.getRequiredPredicates()) {
             if (!PREDEFINED_PREDICATE_NAMES.contains((con instanceof RequiredCrySLPredicate) ? ((RequiredCrySLPredicate) con).getPred().getPredName()
                     : ((AlternativeReqPredicate) con).getAlternatives().get(0).getPredName())) {
@@ -462,7 +445,7 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
                 AlternativeReqPredicate alt = (AlternativeReqPredicate) pred;
                 List<CrySLPredicate> alternatives = alt.getAlternatives();
                 boolean satisfied = false;
-                List<CrySLPredicate> negatives = alternatives.parallelStream().filter(e -> e.isNegated()).collect(Collectors.toList());
+                List<CrySLPredicate> negatives = alternatives.parallelStream().filter(CrySLPredicate::isNegated).collect(toList());
 
                 if (negatives.size() == alternatives.size()) {
                     for (EnsuredCrySLPredicate ensPred : ensuredPredicates) {
@@ -506,9 +489,9 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
                 if (evaluatePredCond(singlePred.getPred())) {
                     remainingPredicates.remove(singlePred);
                 }
-            } else if (rem instanceof CrySLConstraint) {
+            } else if (rem instanceof AlternativeReqPredicate) {
                 List<CrySLPredicate> altPred = ((AlternativeReqPredicate) rem).getAlternatives();
-                if (altPred.parallelStream().anyMatch(e -> evaluatePredCond(e))) {
+                if (altPred.parallelStream().anyMatch(this::evaluatePredCond)) {
                     remainingPredicates.remove(rem);
                 }
             }
@@ -523,9 +506,7 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
         if (conditional != null) {
             EvaluableConstraint evalCons = constraintSolver.createConstraint(conditional);
             evalCons.evaluate();
-            if (evalCons.hasErrors()) {
-                return true;
-            }
+            return evalCons.hasErrors();
         }
         return false;
     }
@@ -533,14 +514,16 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
     private boolean doPredsMatch(CrySLPredicate pred, EnsuredCrySLPredicate ensPred) {
         boolean requiredPredicatesExist = true;
         for (int i = 0; i < pred.getParameters().size(); i++) {
-            String var = pred.getParameters().get(i).getName();
+            final ICrySLPredicateParameter param = pred.getParameters().get(i);
+            String var = param.getName();
             if (isOfNonTrackableType(var)) {
                 continue;
-            } else if (pred.getInvolvedVarNames().contains(var)) {
+            }
 
+            if (pred.getInvolvedVarNames().contains(var)) {
                 final String parameterI = ensPred.getPredicate().getParameters().get(i).getName();
-                Collection<String> actVals = Collections.emptySet();
-                Collection<String> expVals = Collections.emptySet();
+                Collection<String> actVals = emptySet();
+                Collection<String> expVals = emptySet();
 
                 for (CallSiteWithParamIndex cswpi : ensPred.getParametersToValues().keySet()) {
                     if (cswpi.getVarName().equals(parameterI)) {
@@ -555,8 +538,8 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
 
                 String splitter = "";
                 int index = -1;
-                if (pred.getParameters().get(i) instanceof CrySLObject) {
-                    CrySLObject obj = (CrySLObject) pred.getParameters().get(i);
+                if (param instanceof CrySLObject) {
+                    CrySLObject obj = (CrySLObject) param;
                     if (obj.getSplitter() != null) {
                         splitter = obj.getSplitter().getSplitter();
                         index = obj.getSplitter().getIndex();
@@ -566,7 +549,7 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
                     if (index > -1) {
                         foundVal = foundVal.split(splitter)[index];
                     }
-                    actVals = actVals.parallelStream().map(e -> e.toLowerCase()).collect(Collectors.toList());
+                    actVals = actVals.parallelStream().map(String::toLowerCase).collect(toList());
                     requiredPredicatesExist &= actVals.contains(foundVal.toLowerCase());
                 }
             } else {
@@ -577,19 +560,21 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
     }
 
     private Collection<String> retrieveValueFromUnit(CallSiteWithParamIndex cswpi, Collection<ExtractedValue> collection) {
-        Collection<String> values = new ArrayList<String>();
+        Collection<String> values = new ArrayList<>();
         for (ExtractedValue q : collection) {
-            Unit u = q.stmt().getUnit().get();
-            if (cswpi.stmt().equals(q.stmt())) {
-                if (u instanceof AssignStmt) {
-                    values.add(retrieveConstantFromValue(((AssignStmt) u).getRightOp().getUseBoxes().get(cswpi.getIndex()).getValue()));
-                } else {
-                    values.add(retrieveConstantFromValue(u.getUseBoxes().get(cswpi.getIndex()).getValue()));
-                }
-            } else if (u instanceof AssignStmt) {
-                final Value rightSide = ((AssignStmt) u).getRightOp();
-                if (rightSide instanceof Constant) {
-                    values.add(retrieveConstantFromValue(rightSide));
+            if (q.stmt().getUnit().isPresent()) {
+                Unit u = q.stmt().getUnit().get();
+                if (cswpi.stmt().equals(q.stmt())) {
+                    if (u instanceof AssignStmt) {
+                        values.add(retrieveConstantFromValue(((AssignStmt) u).getRightOp().getUseBoxes().get(cswpi.getIndex()).getValue()));
+                    } else {
+                        values.add(retrieveConstantFromValue(u.getUseBoxes().get(cswpi.getIndex()).getValue()));
+                    }
+                } else if (u instanceof AssignStmt) {
+                    final Value rightSide = ((AssignStmt) u).getRightOp();
+                    if (rightSide instanceof Constant) {
+                        values.add(retrieveConstantFromValue(rightSide));
+                    }
                 }
             }
         }
@@ -629,7 +614,10 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
     }
 
     private boolean isPredicateGeneratingState(CrySLPredicate ensPred, State stateNode) {
-        return ensPred instanceof CrySLCondPredicate && isConditionalState(((CrySLCondPredicate) ensPred).getConditionalMethods(), stateNode) || (!(ensPred instanceof CrySLCondPredicate) && stateNode.isAccepting());
+        return ensPred instanceof CrySLCondPredicate
+                && isConditionalState(((CrySLCondPredicate) ensPred).getConditionalMethods(), stateNode)
+                || (!(ensPred instanceof CrySLCondPredicate)
+                && stateNode.isAccepting());
     }
 
     private boolean isConditionalState(Set<StateNode> conditionalMethods, State state) {
@@ -655,7 +643,7 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
     public int hashCode() {
         final int prime = 31;
         int result = super.hashCode();
-        result = prime * result + ((spec == null) ? 0 : spec.hashCode()); // + ((weight() == null) ? 0 : weight().hashCode());
+        result = prime * result + ((spec == null) ? 0 : spec.hashCode());
         return result;
     }
 
@@ -669,16 +657,8 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
             return false;
         AnalysisSeedWithSpecification other = (AnalysisSeedWithSpecification) obj;
         if (spec == null) {
-            if (other.spec != null)
-                return false;
-        } else if (!spec.equals(other.spec))
-            return false;
-//		if (weight() == null) {
-//			if (other.weight() != null)
-//				return false;
-//		} else if (!weight().equals(other.weight()))
-//			return false;
-        return true;
+            return other.spec == null;
+        } else return spec.equals(other.spec);
     }
 
     public boolean isSecure() {

@@ -158,7 +158,7 @@ public class CogniCryptAndroidAnalysis {
     }
 
 	protected List<CrySLRule> getRules() {
-		List<CrySLRule> rules = Lists.newArrayList();
+		List<CrySLRule> rules = new ArrayList<>();
 		if (rulesDirectory == null) {
 			throw new RuntimeException(
 					"Please specify a directory the CrySL rules ( " + CrySLModelReader.cryslFileEnding +" Files) are located in.");

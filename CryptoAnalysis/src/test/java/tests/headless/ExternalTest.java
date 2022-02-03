@@ -1,6 +1,7 @@
 package tests.headless;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 
 import com.google.common.collect.Lists;
@@ -31,7 +32,7 @@ public class ExternalTest {
 				} catch (CryptoAnalysisException e) {
 					e.printStackTrace();
 				}
-				return Lists.newArrayList();
+				return new ArrayList<>();
 			}
 		};
 

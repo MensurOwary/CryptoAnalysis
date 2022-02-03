@@ -3,11 +3,8 @@ package crypto.reporting;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,7 +54,7 @@ public class CSVReporter extends ErrorMarkerListener {
 	private static final String CSV_SEPARATOR = ";";
 	private Set<AbstractError> errors = Sets.newHashSet();
 	private int seeds;
-	private List<String> headers = Lists.newArrayList();
+	private List<String> headers = new ArrayList<>();
 	private Map<String,String> headersToValues = Maps.newHashMap();
 	private List<CrySLRule> rules;
 	private Set<SootMethod> dataflowReachableMethods = Sets.newHashSet();
@@ -174,7 +171,7 @@ public class CSVReporter extends ErrorMarkerListener {
 		try {
 			FileWriter writer = new FileWriter(reportDir + File.separator+ REPORT_NAME);
 			writer.write(Joiner.on(CSV_SEPARATOR).join(headers) + "\n");
-			List<String> line = Lists.newArrayList();
+			List<String> line = new ArrayList<>();
 			for(String h : headers){
 				String string = headersToValues.get(h);
 				if(string == null){

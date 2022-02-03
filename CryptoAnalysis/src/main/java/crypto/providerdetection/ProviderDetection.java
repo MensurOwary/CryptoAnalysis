@@ -1,12 +1,9 @@
 package crypto.providerdetection;
 
 import java.io.File;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Set;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.google.common.collect.Lists;
@@ -346,7 +343,7 @@ public class ProviderDetection {
 	 *          
 	 */
 	public List<CrySLRule> chooseRules(String providerRulesDirectory) {
-		List<CrySLRule> rules = Lists.newArrayList();
+		List<CrySLRule> rules = new ArrayList<>();
 		this.rulesDirectory = providerRulesDirectory;
 		try {
 			rules.addAll(CrySLRuleReader.readFromDirectory(new File(providerRulesDirectory)));
@@ -365,7 +362,7 @@ public class ProviderDetection {
 	 *          
 	 */
 	public List<CrySLRule> chooseRulesZip(String providerRulesZip) {
-		List<CrySLRule> rules = Lists.newArrayList();
+		List<CrySLRule> rules = new ArrayList<>();
 		this.rulesDirectory = providerRulesZip;
 		try {
 			rules.addAll(CrySLRuleReader.readFromZipFile(new File(providerRulesZip)));

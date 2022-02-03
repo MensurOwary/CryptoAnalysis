@@ -31,7 +31,7 @@ public class ConstraintSolver {
     public final static List<String> PREDEFINED_PREDICATE_NAMES = Arrays.asList("callTo", "noCallTo", "neverTypeOf", "length", "notHardCoded", "instanceOf");
 
     private final Set<ISLConstraint> relConstraints = Sets.newHashSet();
-    private final List<ISLConstraint> requiredPredicates = Lists.newArrayList();
+    private final List<ISLConstraint> requiredPredicates = new ArrayList<>();
     private final Collection<Statement> collectedCalls;
     private final Multimap<CallSiteWithParamIndex, ExtractedValue> parsAndVals;
     private final CrySLResultsReporter reporter;
@@ -39,14 +39,19 @@ public class ConstraintSolver {
     private final ClassSpecification classSpec;
     private final Collection<CallSiteWithParamIndex> parameterAnalysisQuerySites;
     private final Multimap<CallSiteWithParamIndex, Type> propagatedTypes;
+    private final Statement initialStatement;
 
-    public ConstraintSolver(AnalysisSeedWithSpecification object, Collection<Statement> collectedCalls, CrySLResultsReporter crySLResultsReporter) {
+    public ConstraintSolver(AnalysisSeedWithSpecification object,
+                            Collection<Statement> collectedCalls,
+                            Statement initialStatement,
+                            CrySLResultsReporter crySLResultsReporter) {
         this.object = object;
         this.classSpec = object.getSpec();
         this.parsAndVals = object.getParameterAnalysis().getCollectedValues();
         this.propagatedTypes = object.getParameterAnalysis().getPropagatedTypes();
         this.parameterAnalysisQuerySites = object.getParameterAnalysis().getAllQuerySites();
         this.collectedCalls = collectedCalls;
+        this.initialStatement = initialStatement;
         List<ISLConstraint> allConstraints = this.classSpec.getRule().getConstraints();
         for (ISLConstraint cons : allConstraints) {
 
@@ -133,7 +138,7 @@ public class ConstraintSolver {
     public EvaluableConstraint createConstraint(ISLConstraint con) {
         if (con instanceof CrySLComparisonConstraint) {
             final Function<CrySLPredicate, PredicateConstraint> predicateCreator = predicate ->
-                    new PredicateConstraint(predicate, parsAndVals, parameterAnalysisQuerySites, propagatedTypes, classSpec, object, collectedCalls);
+                    new PredicateConstraint(predicate, parsAndVals, parameterAnalysisQuerySites, propagatedTypes, classSpec, object, collectedCalls, initialStatement);
 
             return new ComparisonConstraint(
                     (CrySLComparisonConstraint) con, parsAndVals,
@@ -143,7 +148,7 @@ public class ConstraintSolver {
         } else if (con instanceof CrySLValueConstraint) {
             return new ValueConstraint((CrySLValueConstraint) con, parsAndVals, classSpec, object);
         } else if (con instanceof CrySLPredicate) {
-            return new PredicateConstraint((CrySLPredicate) con, parsAndVals, parameterAnalysisQuerySites, propagatedTypes, classSpec, object, collectedCalls);
+            return new PredicateConstraint((CrySLPredicate) con, parsAndVals, parameterAnalysisQuerySites, propagatedTypes, classSpec, object, collectedCalls, initialStatement);
         } else if (con instanceof CrySLConstraint) {
             return new BinaryConstraint((CrySLConstraint) con, parsAndVals, this::createConstraint);
         }

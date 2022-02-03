@@ -33,6 +33,7 @@ public class PredicateConstraint extends EvaluableConstraint {
     private final Collection<Statement> collectedCalls;
     private final ClassSpecification classSpec;
     private final AnalysisSeedWithSpecification object;
+    private final Statement initialStatement;
 
     public PredicateConstraint(CrySLPredicate c,
                                Multimap<CallSiteWithParamIndex, ExtractedValue> parsAndVals,
@@ -40,13 +41,15 @@ public class PredicateConstraint extends EvaluableConstraint {
                                Multimap<CallSiteWithParamIndex, Type> propagatedTypes,
                                ClassSpecification classSpec,
                                AnalysisSeedWithSpecification object,
-                               Collection<Statement> collectedCalls) {
+                               Collection<Statement> collectedCalls,
+                               Statement initialStatement) {
         super(c, parsAndVals);
         this.parameterAnalysisQuerySites = parameterAnalysisQuerySites;
         this.propagatedTypes = propagatedTypes;
         this.collectedCalls = collectedCalls;
         this.classSpec = classSpec;
         this.object = object;
+        this.initialStatement = initialStatement;
     }
 
     @Override
@@ -103,10 +106,8 @@ public class PredicateConstraint extends EvaluableConstraint {
             }
         }
 
-        final Statement errorLocation = calls.stream().findFirst().get();
-
         errors.add(new RequiredMethodToCallError(
-                errorLocation,
+                initialStatement,
                 CrySLMethodToSootMethod.v().convert(parameters.stream().map(p -> (CrySLMethod) p).collect(toList())),
                 classSpec.getRule()
         ));

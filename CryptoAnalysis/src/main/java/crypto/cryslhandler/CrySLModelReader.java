@@ -205,12 +205,12 @@ public class CrySLModelReader {
 
 		this.smg = buildStateMachineGraph(order);
 		final ForbiddenBlock forbEvent = dm.getForbEvent();
-		this.forbiddenMethods = (forbEvent != null) ? getForbiddenMethods(forbEvent.getForb_methods()) : Lists.newArrayList();
+		this.forbiddenMethods = (forbEvent != null) ? getForbiddenMethods(forbEvent.getForb_methods()) : new ArrayList<>();
 
-		final List<ISLConstraint> constraints = (dm.getReqConstraints() != null) ? buildUpConstraints(dm.getReqConstraints().getReq()) : Lists.newArrayList();
-		constraints.addAll(((dm.getRequire() != null) ? collectRequiredPredicates(dm.getRequire().getPred()) : Lists.newArrayList()));
+		final List<ISLConstraint> constraints = (dm.getReqConstraints() != null) ? buildUpConstraints(dm.getReqConstraints().getReq()) : new ArrayList<>();
+		constraints.addAll(((dm.getRequire() != null) ? collectRequiredPredicates(dm.getRequire().getPred()) : new ArrayList<>()));
 		final List<Entry<String, String>> objects = getObjects(dm.getUsage());
-		final List<CrySLPredicate> actPreds = Lists.newArrayList();
+		final List<CrySLPredicate> actPreds = new ArrayList<>();
 
 		for (final ParEqualsPredicate pred : pre_preds.keySet()) {
 			final SuperType cond = pre_preds.get(pred);

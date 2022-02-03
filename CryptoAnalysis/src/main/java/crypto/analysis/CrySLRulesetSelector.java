@@ -1,6 +1,7 @@
 package crypto.analysis;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 import com.google.common.collect.Lists;
 import com.google.common.io.Files;
@@ -48,7 +49,7 @@ public class CrySLRulesetSelector {
 	 */ 
 	public static List<CrySLRule> makeFromRuleset(String rulesBasePath, RuleFormat ruleFormat, Ruleset... set) throws CryptoAnalysisException {
 		
-		List<CrySLRule> rules = Lists.newArrayList();
+		List<CrySLRule> rules = new ArrayList<>();
 		for (Ruleset s : set) {
 			rules.addAll(getRulesset(rulesBasePath, ruleFormat, s));
 		}
@@ -68,7 +69,7 @@ public class CrySLRulesetSelector {
 	public static List<CrySLRule> makeFromRulesetString(String rulesBasePath, RuleFormat ruleFormat,
 			String rulesetString) throws CryptoAnalysisException {
 		String[] set = rulesetString.split(",");
-		List<Ruleset> ruleset = Lists.newArrayList();
+		List<Ruleset> ruleset = new ArrayList<>();
 		for (String s : set) {
 			if (s.equalsIgnoreCase(Ruleset.JavaCryptographicArchitecture.name())) {
 				ruleset.add(Ruleset.JavaCryptographicArchitecture);
@@ -87,7 +88,7 @@ public class CrySLRulesetSelector {
 	}
 
 	private static List<CrySLRule> getRulesset(String rulesBasePath, RuleFormat ruleFormat, Ruleset s) throws CryptoAnalysisException {
-		List<CrySLRule> rules = Lists.newArrayList();
+		List<CrySLRule> rules = new ArrayList<>();
 		File[] listFiles = new File(rulesBasePath + s + "/").listFiles();
 		for (File file : listFiles) {
 			CrySLRule rule = CrySLRuleReader.readFromSourceFile(file);

@@ -1,10 +1,7 @@
 package crypto;
 
 import java.io.File;
-import java.util.Arrays;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
@@ -54,7 +51,7 @@ public abstract class HeadlessCryptoScanner {
 	private static CryptoScannerSettings settings = new CryptoScannerSettings();
 	private boolean hasSeeds;
 	private static Stopwatch callGraphWatch;
-	private static List<CrySLRule> rules = Lists.newArrayList();
+	private static List<CrySLRule> rules = new ArrayList<>();
 	private static String rulesetRootPath;
 	private static final Logger LOGGER = LoggerFactory.getLogger(HeadlessCryptoScanner.class);
 	
@@ -301,7 +298,7 @@ public abstract class HeadlessCryptoScanner {
 	}
 
 	private List<SootMethod> getEntryPoints() {
-		List<SootMethod> entryPoints = Lists.newArrayList();
+		List<SootMethod> entryPoints = new ArrayList<>();
 		entryPoints.addAll(EntryPoints.v().application());
 		entryPoints.addAll(EntryPoints.v().methodsOfApplicationClasses());
 		return entryPoints;

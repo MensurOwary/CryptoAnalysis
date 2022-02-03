@@ -39,11 +39,6 @@ public class FiniteStateMachineToTypestateChangeFunction extends TypeStateMachin
 		if (!fsm.initialTransitionLabel().contains(calledMethod)) return emptySet();
 //        if (!fsm.getInvolvedMethods().contains(calledMethod)) return emptySet();
 
-//        boolean isFirstTransition = fsm.initialTransitionLabel().contains(calledMethod);
-//        if (!isFirstTransition) {
-//            if (!fsm.getInvolvedMethods().contains(calledMethod)) return emptySet();
-//        }
-
         Set<WeightedForwardQuery<TransitionFunction>> forwardQueries = new HashSet<>();
         if (calledMethod.isStatic()) {
             if (unit instanceof AssignStmt) {
