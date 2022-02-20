@@ -10,7 +10,7 @@ public class CrySLConstraint implements ISLConstraint, Serializable {
 	
 	private static final long serialVersionUID = 1L;
 
-	public enum LogOps { and , or , implies , eq}
+	public enum LogOps { and , or , implies , eq, guards}
 	
 	private final LogOps operator;
 	private final ISLConstraint left;

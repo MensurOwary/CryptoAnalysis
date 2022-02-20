@@ -158,7 +158,7 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
 
     private void checkInternalConstraints() {
         cryptoScanner.getAnalysisListener().beforeConstraintCheck(this);
-        constraintSolver = new ConstraintSolver(this, allCallsOnObject.keySet(), stmt(), cryptoScanner.getAnalysisListener());
+        constraintSolver = new ConstraintSolver(this, allCallsOnObject.keySet(), stmt(), var(), getIcfg(), cryptoScanner.getAnalysisListener());
         cryptoScanner.getAnalysisListener().checkedConstraints(this, constraintSolver.getRelConstraints());
         internalConstraintSatisfied = (0 == constraintSolver.evaluateRelConstraints());
 
