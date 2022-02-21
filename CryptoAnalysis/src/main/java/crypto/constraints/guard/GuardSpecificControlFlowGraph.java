@@ -20,7 +20,7 @@ public class GuardSpecificControlFlowGraph {
     }
 
     public boolean guardedExists() {
-        return this.targetNode == null;
+        return this.targetNode != null;
     }
 
     public boolean protectorIsMissing() {
@@ -41,25 +41,35 @@ public class GuardSpecificControlFlowGraph {
 
     private static void toDot(ControlFlowNode root, List<Node> nodes) {
         if (root == null) return;
+        final Node node = Factory.node(stringify(root.data));
         if (root instanceof TerminalNode) {
-            nodes.add(Factory.node(root.data.toString()));
+            nodes.add(node);
         } else if (root instanceof NormalNode) {
             final Unit data = ((NormalNode) root).nextNode.data;
-            nodes.add(Factory.node(root.data.toString()).link(Factory.node(data.toString())));
+            nodes.add(node.link(Factory.node(stringify(data))));
             toDot(((NormalNode) root).nextNode, nodes);
         } else {
             final ConditionalNode cond = (ConditionalNode) root;
             nodes.add(
-                    Factory.node(root.data.toString())
+                    node
                             .link(
-                                    Factory.to(Factory.node(cond.trueBranch.data.toString())).with(Label.of("TRUE")),
-                                    Factory.to(Factory.node(cond.falseBranch.data.toString())).with(Label.of("FALSE")),
-                                    Factory.to(Factory.node(cond.conditionStmt.toString())).with(Label.of("condition"), Style.DASHED)
+                                    Factory.to(Factory.node(stringify(cond.trueBranch.data))).with(Label.of("TRUE")),
+                                    Factory.to(Factory.node(stringify(cond.falseBranch.data))).with(Label.of("FALSE")),
+                                    Factory.to(Factory.node(stringify(cond.conditionStmt))).with(Label.of("condition"), Style.DASHED)
                             )
             );
             toDot(cond.trueBranch, nodes);
             toDot(cond.falseBranch, nodes);
         }
+    }
+
+    private static String stringify(Unit unit) {
+        String lineNum = "";
+        if (unit.getTags().stream().anyMatch(t -> t.getName().equals("LineNumberTag"))) {
+            final String lineNumberTag = unit.getTag("LineNumberTag").toString();
+            lineNum = lineNumberTag + ":";
+        }
+        return String.format("%s%s", lineNum, unit);
     }
 
 }

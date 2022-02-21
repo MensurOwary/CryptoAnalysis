@@ -9,6 +9,7 @@ import boomerang.jimple.Statement;
 import boomerang.jimple.Val;
 import boomerang.results.BackwardBoomerangResults;
 import boomerang.util.AccessPath;
+import com.google.common.collect.Sets;
 import crypto.interfaces.GuardsConstraint;
 import soot.SootMethod;
 import soot.Unit;
@@ -19,6 +20,8 @@ import soot.jimple.internal.JIfStmt;
 import wpds.impl.Weight;
 
 import java.util.*;
+
+import static java.util.stream.Collectors.toSet;
 
 public class GuardEvaluator {
 
@@ -47,85 +50,112 @@ public class GuardEvaluator {
     public void evaluate(GuardsConstraint protector, GuardsConstraint guarded) {
         final GuardSpecificControlFlowGraph graph = constructGraph(protector, guarded);
         graph.logDotGraph();
-        if (graph.guardedExists() && graph.protectorIsMissing()) {
+        analyze(graph, protector);
+    }
+
+    private void analyze(GuardSpecificControlFlowGraph graph, GuardsConstraint protector) {
+        final Map<ControlFlowNode, Set<ControlFlowNode>> dominatorsMap = createDominatorMap(graph.tree);
+
+        final ControlFlowNode guardedNode = graph.targetNode;
+
+        // find the nodes that dominate guarded; and protector 100% will be there
+        final Set<ControlFlowNode> dominatorsOfGuarded = dominatorsMap.entrySet().stream()
+                .filter(e -> e.getValue().contains(guardedNode))
+                .map(Map.Entry::getKey)
+                .collect(toSet());
+
+        Optional<ControlFlowNode> maybeImmediateDominator = findImmediateDominatorOf(guardedNode, dominatorsMap);
+        ConditionalNode branchingNode = null;
+
+        while (maybeImmediateDominator.isPresent()) {
+            final ControlFlowNode immediateDominator = maybeImmediateDominator.get();
+            if (immediateDominator instanceof ConditionalNode) {
+                final ConditionalNode cond = (ConditionalNode) immediateDominator;
+                final Stmt conditionStmt = (Stmt) cond.conditionStmt;
+                if (conditionStmt.containsInvokeExpr()) {
+                    if (protector.getTargetSootMethod().equals(conditionStmt.getInvokeExpr().getMethod())) {
+                        branchingNode = cond;
+                        break;
+                    }
+                }
+            }
+            maybeImmediateDominator = findImmediateDominatorOf(immediateDominator, dominatorsMap);
+        }
+
+        if (branchingNode == null) {
+            System.out.println("BRANCHING NODE NOT FOUND");
+            return;
+        }
+
+        final ControlFlowNode trueBranch = isInverted(branchingNode)
+                ? branchingNode.falseBranch
+                : branchingNode.trueBranch;
+
+        if (dominatorsOfGuarded.contains(trueBranch)) {
+            System.out.println("REQUIREMENT SATISFIED");
+        } else {
+            // if guarded method is not actually guarded by the protector through true branch
+            // then it is an error no matter what
             System.out.println("REQUIREMENT NOT SATISFIED");
-        } else if (graph.guardedExists() && !graph.protectorIsMissing()) {
-            doAnalysis(graph);
         }
     }
 
-    private void doAnalysis(GuardSpecificControlFlowGraph graph) {
-        // TODO: Where does the protectorNode come from?
-        final ControlFlowNode protector = graph.protectorNode;
-        final ControlFlowNode guarded = graph.targetNode;
+    private Optional<ControlFlowNode> findImmediateDominatorOf(ControlFlowNode node,
+                                                              final Map<ControlFlowNode, Set<ControlFlowNode>> dominatorMap) {
+        final Set<ControlFlowNode> allDominatorsOfNode = dominatorMap.entrySet().stream().filter(entry ->
+                        entry.getValue().contains(node) && entry.getKey() != node)
+                .map(Map.Entry::getKey).collect(toSet());
 
-        final Value trackedVariable = protector.data instanceof AssignStmt
-                ? ((AssignStmt) protector.data).getLeftOp() : null;
-        Set<Boolean> potentialValues = new HashSet<>();
+        for (ControlFlowNode dominator : allDominatorsOfNode) {
+            final Set<ControlFlowNode> dominatorsOfDominator = dominatorMap.entrySet().stream().filter(entry ->
+                            entry.getValue().contains(dominator) && entry.getKey() != dominator)
+                    .map(Map.Entry::getKey).collect(toSet());
 
-        final Stack<ControlFlowNodeData> stack = new Stack<>();
-        stack.push(new ControlFlowNodeData(protector));
-
-        while (!stack.isEmpty()) {
-            final ControlFlowNodeData data = stack.pop();
-
-            // once we found a path to "guarded" from the protector, save that "path",
-            // and move on with other nodes, do not keep extending
-            if (data.node.equals(guarded)) {
-                potentialValues.add(data.value);
-                continue;
-            }
-
-            if (data.node instanceof NormalNode) {
-                // TODO: do something if reassignment
-                final ControlFlowNode nextNode = ((NormalNode) data.node).nextNode;
-                if (nextNode != null) {
-                    stack.push(new ControlFlowNodeData(nextNode).setValue(data.value));
-                }
-            } else if (data.node instanceof ConditionalNode) {
-                // if condition uses the trackedVariable in an equals or not equals context
-                // then pass one side as True, the other one as false
-                final ConditionalNode cond = (ConditionalNode) data.node;
-                // FIXME: it should actually be Eq or Neq specifically, binop is too general
-                final Value condition = ((JIfStmt) cond.data).getCondition();
-                final Boolean falseBranchValue;
-                final Boolean trueBranchValue;
-                if (((BinopExpr) condition).getOp1().equals(trackedVariable)) {
-                    // in jimple, v == 0 is the form when we have a non-inverted condition
-                    // in that case, we just goto the false branch
-                    // when we actually invert the condition in the code, we get v != 1
-                    boolean inverted = isInverted(((BinopExpr) condition));
-                    falseBranchValue = inverted;
-                    trueBranchValue = !inverted;
-                } else {
-                    // if it is neither equals nor not equals
-                    // then just pass it onto the next one as nothing happened
-                    falseBranchValue = data.value;
-                    trueBranchValue = data.value;
-                }
-                stack.push(new ControlFlowNodeData(cond.falseBranch).setValue(falseBranchValue));
-                stack.push(new ControlFlowNodeData(cond.trueBranch)).setValue(trueBranchValue);
+            final Sets.SetView<ControlFlowNode> difference = Sets.difference(allDominatorsOfNode, dominatorsOfDominator);
+            if (difference.size() == 1 && difference.contains(dominator)) {
+                return Optional.of(dominator);
             }
         }
+        return Optional.empty();
+    }
 
-        if (potentialValues.isEmpty()) return;
+    private Map<ControlFlowNode, Set<ControlFlowNode>> createDominatorMap(ControlFlowNode root) {
+        final Set<ControlFlowNode> allNodes = new HashSet<>();
+        depthFirstCollect(root, allNodes, null);
 
-        if (potentialValues.size() == 1) {
-            // if that element is true
-            if (potentialValues.stream().allMatch(e -> e != null && e)) {
-                System.out.println("REQUIREMENT SATISFIED");
-                return;
-            }
+        final Map<ControlFlowNode, Set<ControlFlowNode>> dominatorsMap = new HashMap<>();
+
+        for (ControlFlowNode node : allNodes) {
+            final Set<ControlFlowNode> allNewSeen = new HashSet<>();
+            depthFirstCollect(root, allNewSeen, node);
+            final Set<ControlFlowNode> dominatedByNode = new HashSet<>(Sets.difference(allNodes, allNewSeen));
+            dominatorsMap.put(node, dominatedByNode);
         }
-        System.out.println("REQUIREMENT NOT SATISFIED");
+        return dominatorsMap;
+    }
+
+    private void depthFirstCollect(ControlFlowNode root, Set<ControlFlowNode> seen, ControlFlowNode skippedNode) {
+        if (seen.contains(root) || root == skippedNode) return;
+
+        seen.add(root);
+        if (root instanceof TerminalNode) {
+            return;
+        } else if (root instanceof NormalNode) {
+            depthFirstCollect(((NormalNode) root).nextNode, seen, skippedNode);
+        } else if (root instanceof ConditionalNode) {
+            final ConditionalNode cond = (ConditionalNode) root;
+            depthFirstCollect(cond.trueBranch, seen, skippedNode);
+            depthFirstCollect(cond.falseBranch, seen, skippedNode);
+        }
     }
 
     /**
      * Checks if the boolean equality has been inverted using '!'
-     * @param expr the examined binary expression
+     * @param conditionalNode the examined conditional node
      * @return if there's an inversion
      */
-    private boolean isInverted(BinopExpr expr) {
+    private boolean isInverted(ConditionalNode conditionalNode) {
+        final BinopExpr expr = (BinopExpr) ((IfStmt) conditionalNode.data).getCondition();
         if (expr instanceof EqExpr || expr instanceof NeExpr) {
             final String value = expr.getOp2().toString();
             final boolean notEquals = expr instanceof NeExpr;
@@ -277,22 +307,4 @@ public class GuardEvaluator {
         System.out.println(allAliases.size());
     }
 
-}
-
-/**
- * Utility class to hold ControlFlowNode and its value together
- */
-class ControlFlowNodeData {
-    public ControlFlowNode node;
-    public Boolean value;
-
-    public ControlFlowNodeData(ControlFlowNode node) {
-        this.node = node;
-        this.value = null;
-    }
-
-    public ControlFlowNodeData setValue(Boolean value) {
-        this.value = value;
-        return this;
-    }
 }
