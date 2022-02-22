@@ -156,7 +156,7 @@ public class ConstraintSolver {
         } else if (con instanceof CrySLPredicate) {
             return new PredicateConstraint((CrySLPredicate) con, parsAndVals, parameterAnalysisQuerySites, propagatedTypes, classSpec, object, collectedCalls, initialStatement);
         } else if (con instanceof CrySLConstraint) {
-            return new BinaryConstraint((CrySLConstraint) con, parsAndVals, this::createConstraint, initialStatement, val, controlFlowGraph);
+            return new BinaryConstraint((CrySLConstraint) con, parsAndVals, this::createConstraint, initialStatement, val, controlFlowGraph, classSpec.getRule());
         }
         return null;
     }

@@ -107,7 +107,7 @@ public class AnalysisSeedWithSpecification extends IAnalysisSeed {
             return;
         }
         allCallsOnObject = results.getInvokedMethodOnInstance();
-        doBackwardScan();
+//        doBackwardScan();
 
         runExtractParameterAnalysis();
         checkInternalConstraints();

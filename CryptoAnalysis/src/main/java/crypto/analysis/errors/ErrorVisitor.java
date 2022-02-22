@@ -1,14 +1,15 @@
 package crypto.analysis.errors;
 
 public interface ErrorVisitor {
-	public void visit(ConstraintError constraintError);
-	public void visit(ForbiddenMethodError abstractError);
-	public void visit(IncompleteOperationError incompleteOperationError);
-	public void visit(TypestateError typestateError);
-	public void visit(RequiredPredicateError predicateError);
-	public void visit(ImpreciseValueExtractionError predicateError);
-	public void visit(NeverTypeOfError predicateError);
-	public void visit(PredicateContradictionError predicateContradictionError);
-	public void visit(HardCodedError hardcodedError);
-	public void visit(RequiredMethodToCallError requiredMethodError);
+	void visit(ConstraintError constraintError);
+	void visit(ForbiddenMethodError abstractError);
+	void visit(IncompleteOperationError incompleteOperationError);
+	void visit(TypestateError typestateError);
+	void visit(RequiredPredicateError predicateError);
+	void visit(ImpreciseValueExtractionError predicateError);
+	void visit(NeverTypeOfError predicateError);
+	void visit(PredicateContradictionError predicateContradictionError);
+	void visit(HardCodedError hardcodedError);
+	void visit(RequiredMethodToCallError requiredMethodError);
+	void visit(GuardError guardError);
 }

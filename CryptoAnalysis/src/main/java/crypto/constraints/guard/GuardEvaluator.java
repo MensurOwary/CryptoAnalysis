@@ -9,8 +9,9 @@ import boomerang.jimple.Statement;
 import boomerang.jimple.Val;
 import boomerang.results.BackwardBoomerangResults;
 import boomerang.util.AccessPath;
-import com.google.common.collect.Sets;
+import crypto.analysis.errors.GuardError;
 import crypto.interfaces.GuardsConstraint;
+import crypto.rules.CrySLRule;
 import soot.SootMethod;
 import soot.Unit;
 import soot.Value;
@@ -20,7 +21,12 @@ import soot.jimple.internal.JIfStmt;
 import wpds.impl.Weight;
 
 import java.util.*;
+import java.util.function.BiFunction;
+import java.util.stream.Collectors;
 
+import static crypto.constraints.guard.Utils.difference;
+import static crypto.constraints.guard.Utils.getAllDominators;
+import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toSet;
 
 public class GuardEvaluator {
@@ -31,33 +37,44 @@ public class GuardEvaluator {
     private final ObservableDynamicICFG controlFlowGraph;
     // the variable that the Typestate analysis works off of
     private final Val val;
+    private final CrySLRule rule;
 
-    public GuardEvaluator(Statement initialStatement, ObservableDynamicICFG controlFlowGraph, Val val) {
+    public GuardEvaluator(Statement initialStatement, ObservableDynamicICFG controlFlowGraph, Val val, CrySLRule rule) {
         this.initialStatement = initialStatement;
         this.controlFlowGraph = controlFlowGraph;
         this.val = val;
+        this.rule = rule;
     }
 
     /**
      * Given the protector and the guarded methods, evaluate will return possible violations if there's any
+     *
      * @param protector the method that protects/dominates the guarded method
-     * @param guarded the method that needs to be protected/guarded
+     * @param guarded   the method that needs to be protected/guarded
      * @implSpec Currently, the assumption is that the protector needs to be a boolean returning function <br>
-     *           If guarded is missing, that's not a violation; If the protector is missing and
-     *              the guarded is left naked, then that's a violation
+     * If guarded is missing, that's not a violation; If the protector is missing and
+     * the guarded is left naked, then that's a violation
      */
     // TODO: needs to return errors
-    public void evaluate(GuardsConstraint protector, GuardsConstraint guarded) {
-        final GuardSpecificControlFlowGraph graph = constructGraph(protector, guarded);
+    public Collection<GuardError> evaluate(GuardsConstraint protector, GuardsConstraint guarded) {
+        final GuardSpecificControlFlowGraph graph = constructGraph(guarded);
         graph.logDotGraph();
-        analyze(graph, protector);
+        return analyze(graph, protector, guarded);
     }
 
-    private void analyze(GuardSpecificControlFlowGraph graph, GuardsConstraint protector) {
+    private Collection<GuardError> analyze(GuardSpecificControlFlowGraph graph, GuardsConstraint protector, GuardsConstraint guarded) {
         final Map<ControlFlowNode, Set<ControlFlowNode>> dominatorsMap = createDominatorMap(graph.tree);
 
-        final ControlFlowNode guardedNode = graph.targetNode;
+        return graph.targetNodes.stream().map(guardedNode ->
+                        analyzeForNode(guardedNode, protector, guarded, dominatorsMap))
+                .filter(Objects::nonNull)
+                .collect(toList());
+    }
 
+    private GuardError analyzeForNode(ControlFlowNode guardedNode,
+                                      GuardsConstraint protector,
+                                      GuardsConstraint guarded,
+                                      Map<ControlFlowNode, Set<ControlFlowNode>> dominatorsMap) {
         // find the nodes that dominate guarded; and protector 100% will be there
         final Set<ControlFlowNode> dominatorsOfGuarded = dominatorsMap.entrySet().stream()
                 .filter(e -> e.getValue().contains(guardedNode))
@@ -72,10 +89,36 @@ public class GuardEvaluator {
             if (immediateDominator instanceof ConditionalNode) {
                 final ConditionalNode cond = (ConditionalNode) immediateDominator;
                 final Stmt conditionStmt = (Stmt) cond.conditionStmt;
+
                 if (conditionStmt.containsInvokeExpr()) {
-                    if (protector.getTargetSootMethod().equals(conditionStmt.getInvokeExpr().getMethod())) {
-                        branchingNode = cond;
-                        break;
+                    final InvokeExpr invokeExpr = conditionStmt.getInvokeExpr();
+
+                    if (invokeExpr instanceof InstanceInvokeExpr) {
+                        final Value base = ((InstanceInvokeExpr) invokeExpr).getBase();
+                        final Collection<AccessPath> accessPaths = getAllAccessPaths(guardedNode.data);
+                        final boolean aliases = accessPaths.stream()
+                                .filter(a -> a.getFields().isEmpty())
+                                .anyMatch(a -> a.getBase().value().equals(base));
+                        // I want to know if protector's base is an alias of the guarded node's base
+                        if (aliases) {
+                            if (protector.getTargetSootMethod().equals(invokeExpr.getMethod())) {
+                                // make sure at least 1 branch dominates the guardedNode
+                                boolean isBranchOfInterest = dominatorsOfGuarded.contains(cond.trueBranch) || dominatorsOfGuarded.contains(cond.falseBranch);
+                                if (isBranchOfInterest) {
+                                    branchingNode = cond;
+                                    break;
+                                }
+                            }
+                        }
+                    } else {
+                        if (protector.getTargetSootMethod().equals(conditionStmt.getInvokeExpr().getMethod())) {
+                            // make sure at least 1 branch dominates the guardedNode
+                            boolean isBranchOfInterest = dominatorsOfGuarded.contains(cond.trueBranch) || dominatorsOfGuarded.contains(cond.falseBranch);
+                            if (isBranchOfInterest) {
+                                branchingNode = cond;
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -84,7 +127,9 @@ public class GuardEvaluator {
 
         if (branchingNode == null) {
             System.out.println("BRANCHING NODE NOT FOUND");
-            return;
+            return new GuardError(
+                    new Statement((Stmt) guardedNode.data, this.initialStatement.getMethod()), protector, guarded, this.rule
+            );
         }
 
         final ControlFlowNode trueBranch = isInverted(branchingNode)
@@ -92,26 +137,31 @@ public class GuardEvaluator {
                 : branchingNode.trueBranch;
 
         if (dominatorsOfGuarded.contains(trueBranch)) {
-            System.out.println("REQUIREMENT SATISFIED");
-        } else {
-            // if guarded method is not actually guarded by the protector through true branch
-            // then it is an error no matter what
-            System.out.println("REQUIREMENT NOT SATISFIED");
+            return null;
         }
+        // if guarded method is not actually guarded by the protector through true branch
+        // then it is an error no matter what
+        return new GuardError(
+                new Statement((Stmt) guardedNode.data, this.initialStatement.getMethod()), protector, guarded, this.rule
+        );
     }
 
+    /**
+     * Finds the immediate dominator of the given node
+     *
+     * @param node         the node of interest
+     * @param dominatorMap dominator map that contains what node dominates what other nodes
+     * @return optional immediate dominator
+     * @implSpec returns empty when node is the root
+     */
     private Optional<ControlFlowNode> findImmediateDominatorOf(ControlFlowNode node,
-                                                              final Map<ControlFlowNode, Set<ControlFlowNode>> dominatorMap) {
-        final Set<ControlFlowNode> allDominatorsOfNode = dominatorMap.entrySet().stream().filter(entry ->
-                        entry.getValue().contains(node) && entry.getKey() != node)
-                .map(Map.Entry::getKey).collect(toSet());
+                                                               final Map<ControlFlowNode, Set<ControlFlowNode>> dominatorMap) {
+        final Set<ControlFlowNode> allDominatorsOfNode = getAllDominators(node, dominatorMap);
 
         for (ControlFlowNode dominator : allDominatorsOfNode) {
-            final Set<ControlFlowNode> dominatorsOfDominator = dominatorMap.entrySet().stream().filter(entry ->
-                            entry.getValue().contains(dominator) && entry.getKey() != dominator)
-                    .map(Map.Entry::getKey).collect(toSet());
+            final Set<ControlFlowNode> dominatorsOfDominator = getAllDominators(dominator, dominatorMap);
 
-            final Sets.SetView<ControlFlowNode> difference = Sets.difference(allDominatorsOfNode, dominatorsOfDominator);
+            final Set<ControlFlowNode> difference = difference(allDominatorsOfNode, dominatorsOfDominator);
             if (difference.size() == 1 && difference.contains(dominator)) {
                 return Optional.of(dominator);
             }
@@ -128,7 +178,7 @@ public class GuardEvaluator {
         for (ControlFlowNode node : allNodes) {
             final Set<ControlFlowNode> allNewSeen = new HashSet<>();
             depthFirstCollect(root, allNewSeen, node);
-            final Set<ControlFlowNode> dominatedByNode = new HashSet<>(Sets.difference(allNodes, allNewSeen));
+            final Set<ControlFlowNode> dominatedByNode = difference(allNodes, allNewSeen);
             dominatorsMap.put(node, dominatedByNode);
         }
         return dominatorsMap;
@@ -151,6 +201,7 @@ public class GuardEvaluator {
 
     /**
      * Checks if the boolean equality has been inverted using '!'
+     *
      * @param conditionalNode the examined conditional node
      * @return if there's an inversion
      */
@@ -166,45 +217,42 @@ public class GuardEvaluator {
     }
 
     /**
-     * Finds the guarded method in the method body starting from the initial statement.
-     * @param guarded guarded constraint
-     * @return the found unit
+     * Checks if the candidate matches the method specified in the constraint
+     *
+     * @param candidate the candidate unit/statement
+     * @param guarded   guard constraint
+     * @return true if it matches, false otherwise
      */
-    // FIXME: Convert this to Optional
-    private Unit findMethod(GuardsConstraint guarded) {
+    private boolean matches(Unit candidate, GuardsConstraint guarded) {
         SootMethod searchedMethod = guarded.getTargetSootMethod();
-        for (Unit unit : initialStatement.getMethod().getActiveBody().getUnits()) {
-            if (!(unit instanceof Stmt) || !((Stmt) unit).containsInvokeExpr()) continue;
+        if (!(candidate instanceof Stmt) || !((Stmt) candidate).containsInvokeExpr()) return false;
 
-            final InvokeExpr invokeExpr = ((Stmt) unit).getInvokeExpr();
-            if (invokeExpr instanceof InstanceInvokeExpr) {
-                if (((InstanceInvokeExpr) invokeExpr).getBase().equals(val)) {
-                    return unit;
-                }
-            }
-            if (invokeExpr.getMethod().equals(searchedMethod)) {
-                return unit;
-            }
-        }
-        return null;
-    }
+        final InvokeExpr invokeExpr = ((Stmt) candidate).getInvokeExpr();
+        final boolean matchesGuardedMethod = invokeExpr.getMethod().equals(searchedMethod);
+        if (!matchesGuardedMethod) return false;
 
-    private boolean containsMethod(SootMethod method, Unit unit) {
-        if (unit instanceof Stmt && ((Stmt) unit).containsInvokeExpr()) {
-            return ((Stmt) unit).getInvokeExpr().getMethod().equals(method);
+        if (invokeExpr instanceof InstanceInvokeExpr) {
+            // find all the aliases of this.val starting from the candidate unit
+            final Collection<AccessPath> accessPaths = getAllAccessPaths(candidate);
+            final Value base = ((InstanceInvokeExpr) invokeExpr).getBase();
+
+            return accessPaths.stream()
+                    .filter(a -> a.getFields().isEmpty())
+                    .map(a -> a.getBase().value())
+                    .anyMatch(val1 -> val1.equals(base));
         }
+
         return false;
     }
 
     /**
      * Constructs the Control-Flow Graph that contains the information about True/False branches
-     * @param protector the method that protects/dominates the guarded method
+     *
      * @param guarded the method that needs to be protected/guarded
      * @return constructed control-flow graph
      */
-    private GuardSpecificControlFlowGraph constructGraph(GuardsConstraint protector, GuardsConstraint guarded) {
-        final Unit toBeGuarded = findMethod(guarded);
-        final ControlFlowNodeGenerator nodeCreator = new ControlFlowNodeGenerator(controlFlowGraph, toBeGuarded);
+    private GuardSpecificControlFlowGraph constructGraph(GuardsConstraint guarded) {
+        final ControlFlowNodeCreator nodeCreator = new ControlFlowNodeCreator(controlFlowGraph);
 
         final Optional<Unit> maybeInitial = initialStatement.getMethod().getActiveBody().getUnits().stream().findFirst();
         // TODO: better error message
@@ -213,24 +261,25 @@ public class GuardEvaluator {
         final Unit initial = maybeInitial.get();
 
         // the root tree
-        ControlFlowNode tree = nodeCreator.create(initial,null);
+        ControlFlowNode tree = nodeCreator.create(initial, null);
 
         final Stack<ControlFlowNode> stack = new Stack<>();
         stack.add(tree);
 
         final Map<Value, Unit> assignmentLocations = new HashMap<>();
+        Collection<ControlFlowNode> targetNodes = new HashSet<>();
 
-        ControlFlowNode targetNode = null;
-        ControlFlowNode protectorNode = null;
+        Set<Unit> seenSet = new HashSet<>();
 
         while (!stack.isEmpty()) {
             final ControlFlowNode current = stack.pop();
             final Unit data = current.data;
 
-            if (current.data.equals(toBeGuarded)) {
-                targetNode = current;
-            } else if (containsMethod(protector.getTargetSootMethod(), current.data)) {
-                protectorNode = current;
+            if (seenSet.contains(data)) continue;
+            seenSet.add(data);
+
+            if (matches(current.data, guarded)) {
+                targetNodes.add(current);
             }
 
             if (data instanceof JAssignStmt) {
@@ -279,32 +328,32 @@ public class GuardEvaluator {
             }
         }
 
-        return new GuardSpecificControlFlowGraph(tree, protectorNode, targetNode);
+        return new GuardSpecificControlFlowGraph(tree, targetNodes);
     }
 
-    private void doBackwardScan(GuardsConstraint guarded) {
-        final Statement statement = new Statement((Stmt) findMethod(guarded), initialStatement.getMethod());
-
-        // start the seed from the end not from this point
-        final BackwardQuery backwardQuery = new BackwardQuery(statement, val);
-
+    private Collection<AccessPath> getAllAccessPaths(Unit startingPoint) {
         final Boomerang solver = new Boomerang(new DefaultBoomerangOptions() {
             @Override
             public boolean onTheFlyCallGraph() {
                 return false;
             }
         }) {
-
             @Override
             public ObservableICFG<Unit, SootMethod> icfg() {
                 return controlFlowGraph;
             }
-
         };
 
-        final BackwardBoomerangResults<Weight.NoWeight> solve = solver.solve(backwardQuery);
-        final Collection<AccessPath> allAliases = solve.getAllAliases();
-        System.out.println(allAliases.size());
+        // starting from the given starting point and going backwards
+        final Statement statement = new Statement((Stmt) startingPoint, initialStatement.getMethod());
+        final Val val = new Val(this.val.value(), initialStatement.getMethod());
+
+        final BackwardBoomerangResults<Weight.NoWeight> solve = solver.solve(new BackwardQuery(statement, val));
+
+        final Set<AccessPath> allAliases = solve.getAllAliases();
+        allAliases.add(new AccessPath(this.val));
+
+        return allAliases;
     }
 
 }

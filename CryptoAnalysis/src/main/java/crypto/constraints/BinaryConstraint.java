@@ -4,13 +4,16 @@ import boomerang.callgraph.ObservableDynamicICFG;
 import boomerang.jimple.Statement;
 import boomerang.jimple.Val;
 import com.google.common.collect.Multimap;
+import crypto.analysis.errors.GuardError;
 import crypto.constraints.guard.*;
 import crypto.extractparameter.CallSiteWithParamIndex;
 import crypto.extractparameter.ExtractedValue;
 import crypto.interfaces.GuardsConstraint;
 import crypto.interfaces.ISLConstraint;
 import crypto.rules.CrySLConstraint;
+import crypto.rules.CrySLRule;
 
+import java.util.Collection;
 import java.util.function.Function;
 
 class BinaryConstraint extends EvaluableConstraint {
@@ -23,10 +26,11 @@ class BinaryConstraint extends EvaluableConstraint {
                             Function<ISLConstraint, EvaluableConstraint> constraintCreator,
                             Statement initialStatement,
                             Val val,
-                            ObservableDynamicICFG controlFlowGraph) {
+                            ObservableDynamicICFG controlFlowGraph,
+                            CrySLRule rule) {
         super(c, parsAndVals);
         this.constraintCreator = constraintCreator;
-        this.guardEvaluator = new GuardEvaluator(initialStatement, controlFlowGraph, val);
+        this.guardEvaluator = new GuardEvaluator(initialStatement, controlFlowGraph, val, rule);
     }
 
     @Override
@@ -37,7 +41,8 @@ class BinaryConstraint extends EvaluableConstraint {
         if (ops.equals(CrySLConstraint.LogOps.guards)) {
             final GuardsConstraint protector = (GuardsConstraint) binaryConstraint.getLeft();
             final GuardsConstraint guarded = (GuardsConstraint) binaryConstraint.getRight();
-            this.guardEvaluator.evaluate(protector, guarded);
+            final Collection<GuardError> guardErrors = this.guardEvaluator.evaluate(protector, guarded);
+            this.errors.addAll(guardErrors);
             return;
         }
 
