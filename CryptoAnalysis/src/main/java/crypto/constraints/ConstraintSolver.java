@@ -2,7 +2,7 @@ package crypto.constraints;
 
 import boomerang.callgraph.ObservableDynamicICFG;
 import boomerang.jimple.Statement;
-import com.google.common.collect.Lists;
+import boomerang.jimple.Val;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import crypto.analysis.*;
@@ -40,10 +40,14 @@ public class ConstraintSolver {
     private final Collection<CallSiteWithParamIndex> parameterAnalysisQuerySites;
     private final Multimap<CallSiteWithParamIndex, Type> propagatedTypes;
     private final Statement initialStatement;
+    private final Val val;
+    private final ObservableDynamicICFG controlFlowGraph;
 
     public ConstraintSolver(AnalysisSeedWithSpecification object,
                             Collection<Statement> collectedCalls,
                             Statement initialStatement,
+                            Val val,
+                            ObservableDynamicICFG controlFlowGraph,
                             CrySLResultsReporter crySLResultsReporter) {
         this.object = object;
         this.classSpec = object.getSpec();
@@ -52,6 +56,8 @@ public class ConstraintSolver {
         this.parameterAnalysisQuerySites = object.getParameterAnalysis().getAllQuerySites();
         this.collectedCalls = collectedCalls;
         this.initialStatement = initialStatement;
+        this.val = val;
+        this.controlFlowGraph = controlFlowGraph;
         List<ISLConstraint> allConstraints = this.classSpec.getRule().getConstraints();
         for (ISLConstraint cons : allConstraints) {
 
@@ -150,7 +156,7 @@ public class ConstraintSolver {
         } else if (con instanceof CrySLPredicate) {
             return new PredicateConstraint((CrySLPredicate) con, parsAndVals, parameterAnalysisQuerySites, propagatedTypes, classSpec, object, collectedCalls, initialStatement);
         } else if (con instanceof CrySLConstraint) {
-            return new BinaryConstraint((CrySLConstraint) con, parsAndVals, this::createConstraint);
+            return new BinaryConstraint((CrySLConstraint) con, parsAndVals, this::createConstraint, initialStatement, val, controlFlowGraph, classSpec.getRule());
         }
         return null;
     }

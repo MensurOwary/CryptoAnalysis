@@ -27,7 +27,7 @@ public class CrySLMethodToSootMethod {
 	private static final Logger LOGGER = LoggerFactory.getLogger(CrySLMethodToSootMethod.class);
 	
 	private static CrySLMethodToSootMethod instance;
-	private DefaultValueMap<CrySLMethod, Collection<SootMethod>> descriptorToSootMethod = new DefaultValueMap<CrySLMethod, Collection<SootMethod>>() {
+	private final DefaultValueMap<CrySLMethod, Collection<SootMethod>> descriptorToSootMethod = new DefaultValueMap<CrySLMethod, Collection<SootMethod>>() {
 		@Override
 		protected Collection<SootMethod> createItem(CrySLMethod key) {
 			Collection<SootMethod> res = Sets.newHashSet();

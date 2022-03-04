@@ -207,6 +207,11 @@ public abstract class UsagePatternTestingFramework extends AbstractTestingFramew
 									public void visit(RequiredMethodToCallError requiredMethodError) {
 										// TODO: Implement this
 									}
+
+									@Override
+									public void visit(GuardError guardError) {
+										// TODO: Implement this
+									}
 								});
 							}
 

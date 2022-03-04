@@ -116,6 +116,11 @@ public class ErrorMarkerListener extends CrySLAnalysisListener {
             public void visit(RequiredMethodToCallError requiredMethodError) {
                 addMarker(requiredMethodError);
             }
+
+            @Override
+            public void visit(GuardError guardError) {
+                addMarker(guardError);
+            }
         });
     }
 

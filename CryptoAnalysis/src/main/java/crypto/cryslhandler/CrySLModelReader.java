@@ -21,6 +21,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.io.Files;
 import com.google.inject.Injector;
+import crypto.interfaces.GuardsConstraint;
+import de.darmstadt.tu.crossing.crySL.*;
+import de.darmstadt.tu.crossing.crySL.Object;
 import org.eclipse.emf.common.util.EList;
 import org.eclipse.emf.common.util.URI;
 import org.eclipse.emf.ecore.EObject;
@@ -61,36 +64,6 @@ import de.darmstadt.tu.crossing.CrySLStandaloneSetup;
 import de.darmstadt.tu.crossing.constraints.CrySLArithmeticOperator;
 import de.darmstadt.tu.crossing.constraints.CrySLComparisonOperator;
 import de.darmstadt.tu.crossing.constraints.CrySLLogicalOperator;
-import de.darmstadt.tu.crossing.crySL.ArithmeticExpression;
-import de.darmstadt.tu.crossing.crySL.ArithmeticOperator;
-import de.darmstadt.tu.crossing.crySL.ArrayElements;
-import de.darmstadt.tu.crossing.crySL.ComparingOperator;
-import de.darmstadt.tu.crossing.crySL.ComparisonExpression;
-import de.darmstadt.tu.crossing.crySL.Constraint;
-import de.darmstadt.tu.crossing.crySL.DestroysBlock;
-import de.darmstadt.tu.crossing.crySL.Domainmodel;
-import de.darmstadt.tu.crossing.crySL.EnsuresBlock;
-import de.darmstadt.tu.crossing.crySL.Event;
-import de.darmstadt.tu.crossing.crySL.Expression;
-import de.darmstadt.tu.crossing.crySL.ForbMethod;
-import de.darmstadt.tu.crossing.crySL.ForbiddenBlock;
-import de.darmstadt.tu.crossing.crySL.Literal;
-import de.darmstadt.tu.crossing.crySL.LiteralExpression;
-import de.darmstadt.tu.crossing.crySL.LogicalImply;
-import de.darmstadt.tu.crossing.crySL.LogicalOperator;
-import de.darmstadt.tu.crossing.crySL.Object;
-import de.darmstadt.tu.crossing.crySL.ObjectDecl;
-import de.darmstadt.tu.crossing.crySL.Order;
-import de.darmstadt.tu.crossing.crySL.PreDefinedPredicates;
-import de.darmstadt.tu.crossing.crySL.Pred;
-import de.darmstadt.tu.crossing.crySL.PredLit;
-import de.darmstadt.tu.crossing.crySL.ReqPred;
-import de.darmstadt.tu.crossing.crySL.SimpleOrder;
-import de.darmstadt.tu.crossing.crySL.SuPar;
-import de.darmstadt.tu.crossing.crySL.SuParList;
-import de.darmstadt.tu.crossing.crySL.SuperType;
-import de.darmstadt.tu.crossing.crySL.UnaryPreExpression;
-import de.darmstadt.tu.crossing.crySL.UseBlock;
 import de.darmstadt.tu.crossing.crySL.impl.DomainmodelImpl;
 import de.darmstadt.tu.crossing.crySL.impl.ObjectImpl;
 
@@ -448,7 +421,7 @@ public class CrySLModelReader {
 			CrySLArithmeticConstraint left;
 			CrySLArithmeticConstraint right;
 
-			final Constraint leftExpression = comp.getLeftExpression();
+			final Constraint leftExpression = (Constraint) comp.getLeftExpression();
 			if (leftExpression instanceof LiteralExpression) {
 				left = convertLiteralToArithmetic(leftExpression);
 			} else if (leftExpression instanceof ArithmeticExpression) {
@@ -457,7 +430,7 @@ public class CrySLModelReader {
 				left = (CrySLArithmeticConstraint) leftExpression;
 			}
 
-			final Constraint rightExpression = comp.getRightExpression();
+			final Constraint rightExpression = (Constraint) comp.getRightExpression();
 			if (rightExpression instanceof LiteralExpression) {
 				right = convertLiteralToArithmetic(rightExpression);
 			} else {
@@ -486,12 +459,18 @@ public class CrySLModelReader {
 				}
 				slci = new CrySLPredicate(null, ((Pred) cons).getPredName(), vars, false);
 			}
-		} else if (cons instanceof Constraint) {
-			LogOps op = null;
+		} else {
+			final LogOps op;
 			final EObject operator = cons.getOperator();
 			if (operator instanceof LogicalImply) {
 				op = LogOps.implies;
-			} else {
+			} else if (operator instanceof GuardsOperator) {
+				op = LogOps.guards;
+				final CrySLMethod protector = CryslReaderUtils.stringifyMethodSignature(cons.getLeftEvent());
+				final CrySLMethod guarded = CryslReaderUtils.stringifyMethodSignature(cons.getRightEvent());
+
+				return new CrySLConstraint(new GuardsConstraint(protector), new GuardsConstraint(guarded), op);
+			}else {
 				switch ((new CrySLLogicalOperator((LogicalOperator) operator)).toString()) {
 					case "&&":
 						op = LogOps.and;
@@ -683,8 +662,8 @@ public class CrySLModelReader {
 				operator = ArithOp.p;
 		}
 
-		right = new CrySLArithmeticConstraint(new CrySLObject(leftValue, getTypeName(ar.getLeftExpression(), leftValue)),
-				new CrySLObject(rightValue, getTypeName(ar.getRightExpression(), rightValue)), operator);
+		right = new CrySLArithmeticConstraint(new CrySLObject(leftValue, getTypeName((Constraint) ar.getLeftExpression(), leftValue)),
+				new CrySLObject(rightValue, getTypeName((Constraint)ar.getRightExpression(), rightValue)), operator);
 		return right;
 	}
 
