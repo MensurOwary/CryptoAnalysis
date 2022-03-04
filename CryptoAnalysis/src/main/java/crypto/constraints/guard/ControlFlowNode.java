@@ -24,7 +24,7 @@ public class ControlFlowNode {
         return this;
     }
 
-    public List<ControlFlowNode> getParent() {
+    public List<ControlFlowNode> getParents() {
         return this.parents;
     }
 
