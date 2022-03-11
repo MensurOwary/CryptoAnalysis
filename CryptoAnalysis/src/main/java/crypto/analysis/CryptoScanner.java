@@ -137,11 +137,6 @@ public abstract class CryptoScanner {
                 }
             }
         }
-        System.out.println("====WORKLIST START===");
-        for (IAnalysisSeed iAnalysisSeed : worklist) {
-            System.out.println(iAnalysisSeed.var() + " => " + iAnalysisSeed.weight() + " => " + iAnalysisSeed.getRelatedVariables().stream().map(Val::value).collect(Collectors.toList()));
-        }
-        System.out.println("====WORKLIST END===");
     }
 
     /**

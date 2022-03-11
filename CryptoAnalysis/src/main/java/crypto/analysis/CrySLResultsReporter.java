@@ -23,7 +23,11 @@ import typestate.TransitionFunction;
 
 public class CrySLResultsReporter  {
 
-	private List<ICrySLResultsListener> listeners;
+	private final List<ICrySLResultsListener> listeners;
+
+	public List<ICrySLResultsListener> getListeners() {
+		return listeners;
+	}
 
 	public CrySLResultsReporter() {
 		listeners = new ArrayList<ICrySLResultsListener>();

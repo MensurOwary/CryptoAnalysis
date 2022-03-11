@@ -1,0 +1,1 @@
+java -cp CryptoAnalysis-2.8.1-SNAPSHOT-jar-with-dependencies.jar crypto.Runner --appPath "/home/owary/Programming/Research/APIMisuse/Targets/CogniCryptTargets/target/CogniCryptTargets-1.0-SNAPSHOT.jar"

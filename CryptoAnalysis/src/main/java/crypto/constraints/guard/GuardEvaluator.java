@@ -49,7 +49,7 @@ public class GuardEvaluator {
     public Collection<GuardError> evaluate(GuardsConstraint protector, GuardsConstraint guarded) {
         final GuardSpecificControlFlowGraph graph = constructGraph(guarded);
         if (graph == null) return emptySet();
-        graph.logDotGraph();
+//        graph.logDotGraph();
         return analyze(graph, protector, guarded);
     }
 

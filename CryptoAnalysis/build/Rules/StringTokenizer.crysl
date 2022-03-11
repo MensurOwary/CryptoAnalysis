@@ -1,0 +1,14 @@
+SPEC java.util.StringTokenizer
+
+OBJECTS
+    java.util.StringTokenizer st;
+
+EVENTS
+    NextToken: st.nextToken();
+    HasMore: st.hasMoreTokens();
+
+ORDER
+    NextToken
+
+CONSTRAINTS
+    HasMore guards NextToken;

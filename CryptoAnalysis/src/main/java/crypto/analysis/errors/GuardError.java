@@ -29,4 +29,12 @@ public class GuardError extends AbstractError {
     public void accept(ErrorVisitor visitor) {
         visitor.visit(this);
     }
+
+    public GuardsConstraint getProtector() {
+        return protector;
+    }
+
+    public GuardsConstraint getGuarded() {
+        return guarded;
+    }
 }

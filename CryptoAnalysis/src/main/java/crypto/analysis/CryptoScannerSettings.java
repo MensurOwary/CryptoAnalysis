@@ -186,9 +186,9 @@ public class CryptoScannerSettings {
 					showErrorMessage(settings[i]);		
 			}
 		}
-		if(mandatorySettings != 2) {
-			showErrorMessage();
-		}
+//		if(mandatorySettings != 2) {
+//			showErrorMessage();
+//		}
 	}
 	
 	public enum ControlGraph {
